@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Optional
 
-from config.rss_feeds import NewsCategory, get_feed_by_name
+from config.rss_feeds import NewsCategory
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.database import FeedFetchLog, NewsArticle, RSSFeed
@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 @router.get("/feeds", response_model=List[RSSFeedResponse], tags=["Feed"])
 async def get_feeds(db: Session = Depends(get_db)):
     """Get all configured RSS feeds."""
-    rss_service = RSSService(db)
-    return rss_service.get_all_feeds()
+    feeds = db.query(RSSFeed).all()
+    return [RSSFeedResponse.model_validate(feed) for feed in feeds]
 
 @router.get("/feeds/logs", response_model=List[FeedFetchLogResponse], tags=["Feed"])
 async def get_fetch_logs(
@@ -84,8 +84,10 @@ async def toggle_feed_status(feed_name: str, db: Session = Depends(get_db)):
 async def delete_feed(feed_name: str, db: Session = Depends(get_db)):
     """Delete a feed."""
     service = RSSService(db)
-    service.delete_feed(feed_name)
-    return {"message": f"Feed '{feed_name}' deleted successfully"}
+    result = service.delete_feed(feed_name)
+    if result["status"] == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
 
 
 @router.post("/feeds/add", tags=["Feed"])
@@ -110,16 +112,12 @@ async def fetch_all_feeds(db: Session = Depends(get_db)):
 @router.post("/fetch/{feed_name}", tags=["Feed"])
 async def fetch_specific_feed(feed_name: str, db: Session = Depends(get_db)):
     """Fetch a specific RSS feed."""   
-    feed = get_feed_by_name(feed_name)
-    if not feed:
-        raise HTTPException(status_code=404, detail=f"Feed '{feed_name}' not found")
-    
+
     service = RSSService(db)
-    result = await service.fetch_feed_async(feed)
+    result = await service.fetch_feed_async(feed_name)
     
     return {
-        "feed_name": feed.name,
-        "category": feed.category.value,
+        "feed_name": feed_name,
         **result
     }
 

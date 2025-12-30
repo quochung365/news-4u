@@ -19,18 +19,20 @@ class RSSFeed(NamedTuple):
     category: NewsCategory
     is_active: bool = True
 
-# RSS Feeds Configuration
+# RSS Feeds Configuration - SEED DATA ONLY
+# This dictionary is used by scripts/init_db.py to populate the database with initial feeds.
+# After seeding, the database becomes the source of truth. Changes here won't affect runtime.
 RSS_FEEDS: Dict[NewsCategory, List[RSSFeed]] = {
     NewsCategory.VIETNAMESE_NEWS: [
         RSSFeed(
             name="Vnexpress",
-            url="https://vnexpress.net/rss/tin-moi-nhat.rss",
+            url="https://vnexpress.net/rss/the-gioi.rss",
             category=NewsCategory.VIETNAMESE_NEWS,
             is_active=True
         ),
         RSSFeed(
             name="Tuoitre",
-            url="https://tuoitre.vn/rss/tin-moi-nhat.rss",
+            url="https://tuoitre.vn/rss/the-gioi.rss",
             category=NewsCategory.VIETNAMESE_NEWS,
             is_active=True
         )
@@ -109,49 +111,3 @@ def get_all_feeds() -> List[RSSFeed]:
     for category_feeds in RSS_FEEDS.values():
         all_feeds.extend(category_feeds)
     return all_feeds
-
-
-def get_active_feeds() -> List[RSSFeed]:
-    """Get all active RSS feeds as a flat list."""
-    all_feeds = []
-    for category_feeds in RSS_FEEDS.values():
-        all_feeds.extend([feed for feed in category_feeds if feed.is_active])
-    return all_feeds
-
-
-def get_feed_by_name(name: str) -> RSSFeed | None:
-    """Get a specific RSS feed by name."""
-    for feed in get_all_feeds():
-        if feed.name.lower() == name.lower():
-            return feed
-    return None
-
-
-# TODO: The following functions are defined for future use but not currently used in the codebase
-# They can be uncommented and implemented when needed for dynamic feed management
-
-# def get_feeds_by_category(category: NewsCategory) -> List[RSSFeed]:
-#     """Get RSS feeds for a specific category."""
-#     return RSS_FEEDS.get(category, [])
-
-# def add_feed(feed: RSSFeed) -> None:
-#     """Add a new RSS feed to the configuration."""
-#     if feed.category not in RSS_FEEDS:
-#         RSS_FEEDS[feed.category] = []
-#     RSS_FEEDS[feed.category].append(feed)
-
-# def remove_feed(name: str) -> bool:
-#     """Remove an RSS feed by name."""
-#     for category in RSS_FEEDS:
-#         RSS_FEEDS[category] = [
-#             feed for feed in RSS_FEEDS[category] 
-#             if feed.name.lower() != name.lower()
-#         ]
-#     return True
-
-# def update_feed(name: str, updated_feed: RSSFeed) -> bool:
-#     """Update an existing RSS feed."""
-#     if remove_feed(name):
-#         add_feed(updated_feed)
-#         return True
-#     return False

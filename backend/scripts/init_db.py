@@ -48,7 +48,10 @@ def main():
                 loaded_count += 1
         
         db.commit()
-        print(f"✓ Loaded {loaded_count} RSS feeds")
+        if loaded_count > 0:
+            print(f"✓ Loaded {loaded_count} new RSS feeds")
+        else:
+            print("✓ All RSS feeds already exist in database (no changes made)")
         
         # Show database status
         total_feeds = db.query(RSSFeed).count()

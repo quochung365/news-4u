@@ -33,8 +33,8 @@ class RSSService:
     def __init__(self, db: Optional[Session] = None):
         self.db = db
         self.timeout = 30  # seconds
-        self.batch_size = 100  # Batch size for database operations
-        self._slug_cache = set()  # Cache for existing slugs
+        self.batch_size = 100  
+        self._slug_cache = set()  
         self._cache_timestamp = None
         self._cache_ttl = 300  # 5 minutes cache TTL
         
@@ -53,13 +53,13 @@ class RSSService:
     # PUBLIC METHODS
     # ============================================================================
     
-    async def fetch_feed_async(self, feed: RSSFeed) -> Dict:
+    async def fetch_feed_async(self, feed_name: str) -> Dict:
         """
         Fetch RSS feed asynchronously.
         """
         start_time = time.time()
         log_entry = FeedFetchLog(
-            feed_name=feed.name,
+            feed_name=feed_name,
             status="fetching",
             articles_found=0,
             articles_processed=0
@@ -67,10 +67,16 @@ class RSSService:
         if self.db is not None:
             self.db.add(log_entry)
             self.db.commit()
-        
+        feed = self.db.query(RSSFeedModel).filter(RSSFeedModel.name == feed_name).first()
+        if not feed:
+            return {
+                "status": "error",
+                "message": f"Feed '{feed_name}' not found"
+            }
+        feed_url = feed.url
         try:
-            logger.info(f'---- Fetching feed from {feed.name} ----')
-            response = await self._fetch_with_retry(feed.url)
+            logger.info(f'---- Fetching feed from {feed_name} ----')
+            response = await self._fetch_with_retry(feed_url)
             
             # Parse feed
             parsed_feed = feedparser.parse(response.text)
@@ -114,32 +120,60 @@ class RSSService:
     
     async def fetch_all_feeds(self) -> Dict:
         """
-        Fetch all active RSS feeds.
+        Fetch all active RSS feeds from the database and process them.
+        Returns a summary of the fetch operation.
         """
         if self.db is None:
             return {"status": "error", "message": "No database connection"}
         
         db_feeds = self.db.query(RSSFeedModel).filter(RSSFeedModel.is_active == True).all()
         
+        if not db_feeds:
+            return {
+                "status": "success",
+                "message": "No active feeds to fetch",
+                "feeds_processed": 0,
+                "total_articles_found": 0,
+                "total_articles_processed": 0
+            }
+        
+        # Convert DB models to config RSSFeed objects and fetch them
         results = []
+        total_articles_found = 0
+        total_articles_processed = 0
+        
         for db_feed in db_feeds:
-            logger.info(f"---- Fetching feed from {db_feed.name} ----")
-            feed = RSSFeed(
-                name=db_feed.name,
-                url=db_feed.url,
-                category=NewsCategory(db_feed.category),
-                is_active=db_feed.is_active
-            )
-            
-            result = await self.fetch_feed_async(feed)
-            results.append({
-                "feed_name": feed.name,
-                "category": feed.category.value,
-                **result
-            })
+            try:
+                feed = RSSFeed(
+                    name=db_feed.name,
+                    url=db_feed.url,
+                    category=NewsCategory(db_feed.category),
+                    is_active=db_feed.is_active
+                )
+                
+                result = await self.fetch_feed_async(feed)
+                results.append({
+                    "feed_name": feed.name,
+                    **result
+                })
+                
+                if result.get("status") == "success":
+                    total_articles_found += result.get("articles_found", 0)
+                    total_articles_processed += result.get("articles_processed", 0)
+                    
+            except Exception as e:
+                logger.error(f"Error processing feed {db_feed.name}: {e}")
+                results.append({
+                    "feed_name": db_feed.name,
+                    "status": "error",
+                    "error": str(e)
+                })
         
         return {
-            "total_feeds": len(db_feeds),
+            "status": "success",
+            "feeds_processed": len(db_feeds),
+            "total_articles_found": total_articles_found,
+            "total_articles_processed": total_articles_processed,
             "results": results
         }
     
@@ -275,8 +309,13 @@ class RSSService:
         if self.db is None:
             return {"status": "error", "message": "No database connection"}
         
-        self.db.query(RSSFeedModel).filter(RSSFeedModel.name == feed_name).delete()
+        feed = self.get_feed_by_name_from_db(feed_name)
+        if not feed:
+            return {"status": "error", "message": f"Feed '{feed_name}' not found"}
+        
+        self.db.delete(feed)
         self.db.commit()
+        return {"status": "success", "message": f"Feed '{feed_name}' deleted successfully"}
     
     # ============================================================================
     # PRIVATE METHODS

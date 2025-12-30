@@ -10,9 +10,9 @@ import uvicorn
 
 from database import init_db, get_db
 from routers import news
-from config.rss_feeds import get_all_feeds
 from services.scheduler_service import scheduler_service
 import logging
+from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,31 +26,14 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized")
     
-    from models.database import RSSFeed
-    db = next(get_db())
-    try:
-        feeds = get_all_feeds()
-        for feed in feeds:
-            existing = db.query(RSSFeed).filter(RSSFeed.name == feed.name).first()
-            if not existing:
-                db_feed = RSSFeed(
-                    name=feed.name,
-                    url=feed.url,
-                    category=feed.category.value
-                )
-                db.add(db_feed)
-        db.commit()
-        logger.info(f"Loaded {len(feeds)} RSS feeds")
-    finally:
-        db.close()
-    
-    # Start the scheduler
-    scheduler_service.start()
-    logger.info("Scheduler started with cronjobs")
-    
+    if (settings.SCHEDULE_ENABLE):
+        scheduler_service.start()
+        logger.info("Scheduler started with cronjobs")
+    else:
+        logger.info("Scheduler is disabled")
+
     yield
     
-    # Stop the scheduler
     scheduler_service.stop()
     logger.info("Scheduler stopped")
     logger.info("Shutting down News 4U RSS Aggregator...")
