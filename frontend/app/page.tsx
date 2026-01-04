@@ -319,7 +319,7 @@ function HomePageContent() {
           <div className="flex justify-end items-center py-2 sm:py-4">
             <div className="flex items-center space-x-3 ">
               <div className="mx-4">
-                <a href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
+                <a href="/news" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
                   <h1 className="text-xl sm:text-2xl font-bold text-primary-800 dark:text-white">News 4U</h1>
                 </a>
               </div>
