@@ -54,7 +54,9 @@ app.add_middleware(
         "http://localhost:3000", 
         "http://127.0.0.1:3000",
         "https://news-4u.onrender.com",
-        "https://news-4u.vercel.app"
+        "https://news-4u.vercel.app",
+        "http://news.localhost",
+        "http://news.hqtran.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
