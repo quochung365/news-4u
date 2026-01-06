@@ -10,9 +10,52 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from database import init_db, get_db
+from database import init_db, get_db, engine
 from models.database import RSSFeed, NewsArticle, FeedFetchLog
 from config.rss_feeds import get_all_feeds
+from sqlalchemy import text
+
+
+def ensure_slug_column():
+    """Ensure slug column exists in news_articles table."""
+    try:
+        with engine.connect() as conn:
+            # First check if table exists
+            result = conn.execute(text("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='news_articles'
+            """))
+            table_exists = result.fetchone() is not None
+            
+            if not table_exists:
+                # Table doesn't exist yet, init_db() will create it with the correct schema
+                return
+            
+            # Check if slug column already exists
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM pragma_table_info('news_articles') 
+                WHERE name = 'slug'
+            """))
+            count = result.scalar()
+            column_exists = count is not None and count > 0
+            
+            if not column_exists:
+                print("Adding slug column to news_articles table...")
+                conn.execute(text("""
+                    ALTER TABLE news_articles 
+                    ADD COLUMN slug VARCHAR(100)
+                """))
+                
+                # Create unique index on slug column
+                conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_article_slug_unique ON news_articles(slug)
+                """))
+                conn.commit()
+                print("✓ Slug column added to news_articles table")
+            else:
+                print("✓ Slug column already exists")
+    except Exception as e:
+        print(f"Warning: Could not check/add slug column: {e}")
 
 
 def main():
@@ -22,6 +65,9 @@ def main():
     # Initialize database tables
     init_db()
     print("✓ Database tables created")
+    
+    # Ensure slug column exists (for existing databases)
+    ensure_slug_column()
 
     # Delete all RSSFeeds
     db = next(get_db())
