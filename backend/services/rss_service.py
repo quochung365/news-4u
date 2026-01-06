@@ -151,7 +151,7 @@ class RSSService:
                     is_active=db_feed.is_active
                 )
                 
-                result = await self.fetch_feed_async(feed)
+                result = await self.fetch_feed_async(feed.name)
                 results.append({
                     "feed_name": feed.name,
                     **result
