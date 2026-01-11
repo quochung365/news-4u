@@ -18,7 +18,7 @@ from config.rss_feeds import NewsCategory, RSSFeed
 import feedparser
 import httpx
 from lib.utils import generate_unique_slug
-from models.database import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
+from models import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
 from newspaper import Article, Config
 from services.site_extractors import site_extractor_manager
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -396,7 +396,7 @@ class RSSService:
                     link=link,
                     author=author,
                     published_date=published_date,
-                    category=feed.category.value,
+                    category=feed.category,
                     source_name=feed.name,
                     source_url=feed.url,
                     image_url=image_url,

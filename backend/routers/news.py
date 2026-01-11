@@ -8,15 +8,15 @@ from typing import List, Optional
 from config.rss_feeds import NewsCategory
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models.database import FeedFetchLog, NewsArticle, RSSFeed
-from schemas.news import (
+from models import FeedFetchLog, NewsArticle, RSSFeed
+from schemas import (
     FeedFetchLogResponse,
     HealthCheckResponse,
     NewsArticleList,
     NewsArticleResponse,
     RSSFeedResponse,
 )
-from schemas.news import RSSFeedCreate
+from schemas import RSSFeedCreate
 from services.rss_service import RSSService
 from services.scheduler_service import scheduler_service
 from sqlalchemy import text, func

@@ -116,6 +116,16 @@ export const newsApi = {
     return response.data;
   },
 
+  // Add feed
+  addFeed: async (feed: {
+    name: string;
+    url: string;
+    category: string;
+  }): Promise<any> => {
+    const response = await api.post('/api/news/feeds/add', feed);
+    return response.data;
+  },
+
   // Extract article content
   extractArticleContent: async (articleId: number): Promise<any> => {
     const response = await api.post(`/api/news/articles/${articleId}/extract`);

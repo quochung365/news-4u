@@ -70,6 +70,21 @@ export default function ArticlePage() {
   }
 
   return (
+    <div>
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-2 sm:px-0 lg:px-6">
+          <div className="flex justify-between items-center py-2 sm:py-4">
+            <div className="flex items-center space-x-3 justify-between">
+              <div className="mx-4">
+                <a href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
+                  <h1 className="text-xl sm:text-2xl font-bold text-primary-800 dark:text-white">News 4U</h1>
+                </a>
+              </div>
+            </div>
+            </div>
+
+        </div>
+      </header>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 sm:p-8 p-2">
       <div className="max-w-4xl mx-auto">
         <button
@@ -147,6 +162,7 @@ export default function ArticlePage() {
           </div>
         </article>
       </div>
+    </div>
     </div>
   );
 } 

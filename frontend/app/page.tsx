@@ -316,17 +316,19 @@ function HomePageContent() {
       {/* Header - Always visible */}
       <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-2 sm:px-0 lg:px-6">
-          <div className="flex justify-end items-center py-2 sm:py-4">
-            <div className="flex items-center space-x-3 ">
+          <div className="flex justify-between items-center py-2 sm:py-4">
+            <div className="flex items-center space-x-3 justify-between">
               <div className="mx-4">
-                <a href="/news" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
+                <a href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
                   <h1 className="text-xl sm:text-2xl font-bold text-primary-800 dark:text-white">News 4U</h1>
                 </a>
               </div>
+            </div>
+            <div className="flex items-center">
               <FeedManager
                 selectedFeeds={selectedFeeds}
                 onFeedSelectionApply={handleFeedSelectionApply}
-              />
+                />
               <DarkModeToggle />
             </div>
           </div>

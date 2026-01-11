@@ -40,6 +40,7 @@ venv.bak/
 *.sqlite
 *.sqlite3
 backend/alembic/versions/
+postgres_data/
 
 # Logs
 logs

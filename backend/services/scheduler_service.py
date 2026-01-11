@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from services.rss_service import RSSService
-from models.database import NewsArticle
+from models import NewsArticle
 
 logger = logging.getLogger(__name__)
 
