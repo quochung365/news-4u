@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { newsApi, RSSFeed } from '@/lib/api';
 import { Settings, Plus, X } from 'lucide-react';
-import { CATEGORY_COLORS } from '@/lib/constants';
 
 interface FeedManagerProps {
   selectedFeeds: string[];
@@ -142,10 +141,6 @@ export default function FeedManager({ selectedFeeds, onFeedSelectionApply }: Fee
     }
   };
 
-  const getCategoryColor = (category: string) => {
-    const normalizedCategory = category.toLowerCase().replace(/\s/g, '_');
-    return CATEGORY_COLORS[normalizedCategory] || CATEGORY_COLORS['default'];
-  };
 
   if (loading) {
     return (
@@ -275,12 +270,7 @@ export default function FeedManager({ selectedFeeds, onFeedSelectionApply }: Fee
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900"
                 />
                 <div className="ml-3 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{feed.name}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(feed.category)}`}>
-                      {feed.category.replace('_', ' ')}
-                    </span>
-                  </div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">{feed.name}</span>
                 </div>
               </label>
             ))}

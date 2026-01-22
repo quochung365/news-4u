@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { NewsArticle } from '@/lib/api';
-import { calculateReadTime, formatRelativeTime, getCategoryColor, getCategoryIcon, getSourceIcon, truncateWords } from '@/lib/utils';
-import { Dot, Loader2, Clock } from 'lucide-react';
+import { formatRelativeTime, getSourceIcon, truncateWords } from '@/lib/utils';
+import { Dot, Loader2 } from 'lucide-react';
 
 interface ArticleCardProps {
   article: NewsArticle;
@@ -13,8 +13,7 @@ interface ArticleCardProps {
 
 export default function ArticleCard({ article, onArticleClick, isLoading = false }: ArticleCardProps) {
   const [imageError, setImageError] = useState(false);
-  const hasContent = article.content && article.content.length > 0;
-  const readTime = hasContent && article.content ? calculateReadTime(article.content) : 0;
+  
   const handleClick = () => {
     if (!isLoading) {
       onArticleClick(article);
@@ -27,6 +26,7 @@ export default function ArticleCard({ article, onArticleClick, isLoading = false
         isLoading ? 'opacity-75 pointer-events-none' : 'hover:scale-[1.02]'
       } bg-white dark:bg-gray-800`}
       onClick={handleClick}
+      data-article-id={article.id}
     >
       {/* Mobile: horizontal flex, Desktop: vertical stack */}
       <div className="h-full flex flex-row sm:flex-col items-stretch">
@@ -64,9 +64,6 @@ export default function ArticleCard({ article, onArticleClick, isLoading = false
           </div>
           {/* Info row for mobile, below title/summary */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-gray-700 dark:text-gray-300 mt-2 sm:hidden">
-            {hasContent && readTime > 0 && (
-              <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{readTime}m read</span>
-            )}
             <span className="flex items-center gap-1"><span className="text-lg">{getSourceIcon(article.source_name)}</span>{article.source_name}</span>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {formatRelativeTime(article.published_date || article.created_at)}
@@ -77,14 +74,6 @@ export default function ArticleCard({ article, onArticleClick, isLoading = false
             <div className="flex items-center space-x-2">
               <span className="text-lg">{getSourceIcon(article.source_name)}</span>
               <span>{article.source_name}</span>
-              <Dot className="h-4 w-4"/>
-
-              {/* Reading time on the right (if available) */}
-            {hasContent && readTime > 0 && (
-              <span className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-                <Clock className="h-4 w-4" />{readTime} min read
-              </span>
-            )}
             </div>
             
             <span className="text-xs text-gray-500 dark:text-gray-400">

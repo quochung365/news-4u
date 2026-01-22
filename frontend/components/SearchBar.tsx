@@ -4,11 +4,10 @@ import { useState, useEffect } from 'react';
 import { Search, Filter, X } from 'lucide-react';
 
 interface SearchBarProps {
-  onSearch: (query: string, category: string, timeFilter: string) => void;
+  onSearch: (query: string, timeFilter: string) => void;
   onClear: () => void;
   isLoading?: boolean;
   initialQuery?: string;
-  initialCategory?: string;
   initialTimeFilter?: string;
 }
 
@@ -17,11 +16,9 @@ export default function SearchBar({
   onClear, 
   isLoading = false,
   initialQuery = '',
-  initialCategory = 'all',
   initialTimeFilter = '24h'
 }: SearchBarProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [category, setCategory] = useState(initialCategory);
   const [timeFilter, setTimeFilter] = useState(initialTimeFilter);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -31,28 +28,23 @@ export default function SearchBar({
   }, [initialQuery]);
 
   useEffect(() => {
-    setCategory(initialCategory);
-  }, [initialCategory]);
-
-  useEffect(() => {
     setTimeFilter(initialTimeFilter);
   }, [initialTimeFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query.trim(), category, timeFilter);
+      onSearch(query.trim(), timeFilter);
     }
   };
 
   const handleClear = () => {
     setQuery('');
-    setCategory('all');
     setTimeFilter('24h');
     onClear();
   };
 
-  const hasActiveFilters = query || category !== 'all' || timeFilter !== '24h';
+  const hasActiveFilters = query || timeFilter !== '24h';
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
@@ -112,28 +104,7 @@ export default function SearchBar({
 
         {/* Filters */}
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            {/* Category Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="all">All Categories</option>
-                <option value="tech">Technology</option>
-                <option value="business">Business</option>
-                <option value="world">World</option>
-                <option value="sports">Sports</option>
-                <option value="entertainment">Entertainment</option>
-                <option value="health">Health</option>
-                <option value="science">Science</option>
-              </select>
-            </div>
-
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             {/* Time Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

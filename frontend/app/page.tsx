@@ -1,19 +1,20 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { newsApi, NewsArticle } from '@/lib/api';
-import { Newspaper, Search, Globe, Laptop, Flag } from 'lucide-react';
+import { Search } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import Pagination from '@/components/Pagination';
 import FeedManager from '../components/FeedManager';
 import ArticleCard from '@/components/ArticleCard';
+import ExpandedArticleView from '@/components/ExpandedArticleView';
 import DarkModeToggle from '@/components/DarkModeToggle';
-import { ARTICLES_PER_PAGE, UI_CATEGORY_MAP } from '@/lib/constants';
+import { ARTICLES_PER_PAGE } from '@/lib/constants';
 
 function HomePageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const searchBarRef = useRef<HTMLDivElement>(null);
 
   // State management
   const [articles, setArticles] = useState<NewsArticle[]>([]);
@@ -21,28 +22,25 @@ function HomePageContent() {
     articles: boolean;
     articleId: number | null;
   }>({ articles: false, articleId: null });
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
-  const [activeTab, setActiveTab] = useState<'news' | 'search'>('news');
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchCategory, setSearchCategory] = useState('all');
   const [searchTimeFilter, setSearchTimeFilter] = useState('24h');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<NewsArticle[]>([]);
   const [searchTotal, setSearchTotal] = useState(0);
   const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]);
   const [totalArticles, setTotalArticles] = useState(0);
+  const [showSearchBar, setShowSearchBar] = useState(false);
 
   // State persistence functions
   const saveStateToStorage = () => {
     const state = {
-      selectedCategory,
       currentPage,
       selectedFeeds,
-      activeTab,
+      isSearchMode,
       searchQuery,
-      searchCategory,
       searchTimeFilter,
       searchResults: searchResults.length > 0 ? searchResults : [],
       searchTotal
@@ -55,12 +53,10 @@ function HomePageContent() {
       const savedState = localStorage.getItem('news4u_state');
       if (savedState) {
         const state = JSON.parse(savedState);
-        setSelectedCategory(state.selectedCategory || 'all');
         setCurrentPage(state.currentPage || 1);
         setSelectedFeeds(state.selectedFeeds || []);
-        setActiveTab(state.activeTab || 'news');
+        setIsSearchMode(state.isSearchMode || false);
         setSearchQuery(state.searchQuery || '');
-        setSearchCategory(state.searchCategory || 'all');
         setSearchTimeFilter(state.searchTimeFilter || '24h');
         setSearchResults(state.searchResults || []);
         setSearchTotal(state.searchTotal || 0);
@@ -74,12 +70,10 @@ function HomePageContent() {
 
   const updateURLWithState = () => {
     const params = new URLSearchParams();
-    if (selectedCategory !== 'all') params.set('category', selectedCategory);
     if (currentPage > 1) params.set('page', currentPage.toString());
     if (selectedFeeds.length > 0) params.set('feeds', selectedFeeds.join(','));
-    if (activeTab === 'search') params.set('tab', 'search');
+    if (isSearchMode) params.set('tab', 'search');
     if (searchQuery) params.set('q', searchQuery);
-    if (searchCategory !== 'all') params.set('searchCategory', searchCategory);
     if (searchTimeFilter !== '24h') params.set('timeFilter', searchTimeFilter);
 
     const newURL = params.toString() ? `/?${params.toString()}` : '/';
@@ -87,57 +81,76 @@ function HomePageContent() {
   };
 
   const loadStateFromURL = () => {
-    const category = searchParams.get('category') || 'all';
     const page = parseInt(searchParams.get('page') || '1');
     const feeds = searchParams.get('feeds')?.split(',').filter(Boolean) || [];
     const tab = searchParams.get('tab') || 'news';
     const query = searchParams.get('q') || '';
-    const searchCat = searchParams.get('searchCategory') || 'all';
     const timeFilter = searchParams.get('timeFilter') || '24h';
 
-    setSelectedCategory(category);
     setCurrentPage(page);
     setSelectedFeeds(feeds);
-    setActiveTab(tab as 'news' | 'search');
+    setIsSearchMode(tab === 'search');
     setSearchQuery(query);
-    setSearchCategory(searchCat);
     setSearchTimeFilter(timeFilter);
 
-    return { category, page, feeds, tab, query, searchCat, timeFilter };
+    return { page, feeds, tab, query, timeFilter };
   };
 
   useEffect(() => {
     const urlState = loadStateFromURL();
-    if (!urlState.category && !urlState.page && !urlState.feeds.length && !urlState.query) {
+    if (!urlState.page && !urlState.feeds.length && !urlState.query) {
       const storageState = loadStateFromStorage();
       if (storageState) {
-        if (storageState.activeTab === 'search' && storageState.searchQuery) {
+        if (storageState.isSearchMode && storageState.searchQuery) {
           setSearchTotal(storageState.searchTotal || 0);
         } else {
-          loadArticles(storageState.selectedCategory, storageState.currentPage, storageState.selectedFeeds);
+          loadArticles(storageState.currentPage || 1, storageState.selectedFeeds || []);
         }
       } else {
-        loadArticles('all', 1, []);
+        loadArticles(1, []);
       }
     } else {
       if (urlState.tab === 'search' && urlState.query) {
-        handleSearch(urlState.query, urlState.searchCat, urlState.timeFilter);
+        handleSearch(urlState.query, urlState.timeFilter);
       } else {
-        loadArticles(urlState.category, urlState.page, urlState.feeds);
+        loadArticles(urlState.page, urlState.feeds);
       }
     }
   }, []);
 
   useEffect(() => {
-    loadArticles(selectedCategory, currentPage, selectedFeeds);
-  }, [currentPage, selectedCategory, selectedFeeds]);
+    if (!isSearchMode) {
+      loadArticles(currentPage, selectedFeeds);
+    }
+  }, [currentPage, selectedFeeds, isSearchMode]);
 
   useEffect(() => {
     saveStateToStorage();
     updateURLWithState();
-  }, [selectedCategory, currentPage, selectedFeeds, activeTab, searchQuery, searchCategory, searchTimeFilter]);
+  }, [currentPage, selectedFeeds, isSearchMode, searchQuery, searchTimeFilter]);
 
-  const loadArticles = async (category = 'all', page = 1, feeds: string[]) => {
+  // Close search bar when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchBarRef.current && !searchBarRef.current.contains(event.target as Node)) {
+        // Don't close if clicking on the search icon button
+        const target = event.target as HTMLElement;
+        if (!target.closest('button[title="Search"]')) {
+          setShowSearchBar(false);
+        }
+      }
+    };
+
+    if (showSearchBar) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSearchBar]);
+
+  const loadArticles = async (page = 1, feeds: string[]) => {
     try {
       setLoading(prev => ({ ...prev, articles: true }));
       const params: any = {
@@ -145,9 +158,6 @@ function HomePageContent() {
         per_page: ARTICLES_PER_PAGE,
         feeds: feeds,
       };
-      if (category !== 'all') {
-        params.category = UI_CATEGORY_MAP[category] || category;
-      }
       const articlesData = await newsApi.getArticles(params);
       setArticles(articlesData.articles);
       setTotalArticles(articlesData.total);
@@ -160,22 +170,27 @@ function HomePageContent() {
   };
 
   const handleArticleClick = async (article: NewsArticle) => {
-    if (article.slug) {
-      saveStateToStorage();
-      updateURLWithState();
-      router.push(`/article/${article.slug}`);
-    } else {
+    // Set the selected article to show expanded view
+    setSelectedArticle(article);
+    
+    // Optionally extract content if not already processed
+    if (!article.content && !article.is_processed) {
       setLoading(prev => ({ ...prev, articleId: article.id }));
       try {
         const updatedArticle = await newsApi.extractArticleContent(article.id);
         setArticles(prev => prev.map(a => a.id === article.id ? updatedArticle : a));
         setSelectedArticle(updatedArticle);
       } catch (error) {
-        setSelectedArticle(article);
+        // Keep the original article if extraction fails
+        console.error('Error extracting article content:', error);
       } finally {
         setLoading(prev => ({ ...prev, articleId: null }));
       }
     }
+  };
+
+  const handleCloseExpandedView = () => {
+    setSelectedArticle(null);
   };
 
   const handleExtractContent = async (articleId: number) => {
@@ -195,17 +210,17 @@ function HomePageContent() {
     }
   };
 
-  const handleSearch = async (query: string, category: string, timeFilter: string) => {
+  const handleSearch = async (query: string, timeFilter: string) => {
     try {
       setIsSearching(true);
       setSearchQuery(query);
-      setSearchCategory(category);
       setSearchTimeFilter(timeFilter);
       setCurrentPage(1);
+      setIsSearchMode(true);
+      setShowSearchBar(false);
 
       const result = await newsApi.searchArticles({
         query,
-        category,
         time_filter: timeFilter,
         page: 1,
         per_page: ARTICLES_PER_PAGE
@@ -229,7 +244,6 @@ function HomePageContent() {
       setIsSearching(true);
       const result = await newsApi.searchArticles({
         query: searchQuery,
-        category: searchCategory,
         time_filter: searchTimeFilter,
         page,
         per_page: ARTICLES_PER_PAGE
@@ -253,10 +267,12 @@ function HomePageContent() {
 
   const handleSearchClear = () => {
     setSearchQuery('');
-    setSearchCategory('all');
     setSearchTimeFilter('24h');
     setSearchResults([]);
     setSearchTotal(0);
+    setIsSearchMode(false);
+    setShowSearchBar(false);
+    loadArticles(1, selectedFeeds);
     saveStateToStorage();
     updateURLWithState();
   };
@@ -264,11 +280,10 @@ function HomePageContent() {
   const handleFeedSelectionApply = async (feeds: string[]) => {
     setSelectedFeeds(feeds);
     setCurrentPage(1);
-    setSelectedCategory('all');
     setSearchQuery('');
     setSearchResults([]);
     setSearchTotal(0);
-    setActiveTab('news');
+    setIsSearchMode(false);
     try {
       setLoading(prev => ({ ...prev, articles: true }));
       const params: any = {
@@ -303,13 +318,6 @@ function HomePageContent() {
     );
   }
 
-  const categories = [
-    { key: 'all', label: 'All News', icon: <Newspaper className="h-4 w-4 mr-1" />, color: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200' },
-    { key: 'vn', label: 'VN', icon: <Flag className="h-4 w-4 mr-1 text-green-600 dark:text-green-300" />, color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' },
-    { key: 'global', label: 'Global', icon: <Globe className="h-4 w-4 mr-1 text-purple-600 dark:text-purple-300" />, color: 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200' },
-    { key: 'us', label: 'US', icon: <Flag className="h-4 w-4 mr-1 text-red-600 dark:text-red-300" />, color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' },
-    { key: 'tech', label: 'Tech', icon: <Laptop className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-300" />, color: 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' },
-  ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -324,77 +332,52 @@ function HomePageContent() {
                 </a>
               </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center space-x-2">
               <FeedManager
                 selectedFeeds={selectedFeeds}
                 onFeedSelectionApply={handleFeedSelectionApply}
                 />
+              <button
+                onClick={() => setShowSearchBar(!showSearchBar)}
+                className={`flex items-center justify-center p-2 rounded-md transition-colors ${
+                  isSearchMode || showSearchBar
+                    ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
+                    : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                }`}
+                title="Search"
+              >
+                <Search className="h-5 w-5" />
+              </button>
               <DarkModeToggle />
             </div>
           </div>
         </div>
       </header>
 
-      {/* Category Tabs */}
-      <nav className="max-w-7xl mx-auto px-4 sm:px-0 lg:px-6 mt-4">
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-          {categories.map((cat) => (
-            <button
-              key={cat.key}
-              onClick={() => {
-                setActiveTab('news');
-                setSelectedFeeds([]);
-                setSelectedCategory(cat.key);
-                setCurrentPage(1);
-                setSearchQuery('');
-                setSearchResults([]);
-                setSearchTotal(0);
-                loadArticles(cat.key, 1, []);
-                saveStateToStorage();
-                updateURLWithState();
-              }}
-              className={`flex items-center px-3 py-1.5 rounded-full font-medium focus:outline-none transition-all duration-150 border text-xs whitespace-nowrap shadow-sm
-                ${activeTab === 'news' && selectedCategory === cat.key
-                  ? `${cat.color} border-primary-600 ring-2 ring-primary-200 dark:ring-primary-700`
-                  : `${cat.color} border-transparent hover:border-primary-400 hover:ring-1 hover:ring-primary-100 dark:hover:ring-primary-700`}
-              `}
-              style={{ minWidth: 80 }}
-            >
-              {cat.icon}
-              {cat.label}
-            </button>
-          ))}
-          <div className="flex-1" />
-          {/* Search Tab on the far right */}
-          <button
-            onClick={() => {
-              setActiveTab('search');
-              saveStateToStorage();
-              updateURLWithState();
-            }}
-            className={`flex items-center px-3 py-1.5 rounded-full font-medium focus:outline-none transition-all duration-150 border-2 text-xs whitespace-nowrap ml-2
-              ${activeTab === 'search'
-                ? 'border-primary-600 text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-gray-800 shadow-md'
-                : 'border-gray-400 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:border-primary-500 hover:text-primary-700'}
-            `}
-            style={{ minWidth: 80 }}
-          >
-            <Search className="inline-block mr-1 h-4 w-4 align-text-bottom" /> Search
-          </button>
+      {/* Search Bar Modal/Popup */}
+      {showSearchBar && (
+        <div ref={searchBarRef} className="max-w-7xl mx-auto px-4 sm:px-0 lg:px-6 mt-4">
+          <SearchBar
+            onSearch={handleSearch}
+            onClear={handleSearchClear}
+            isLoading={isSearching}
+            initialQuery={searchQuery}
+            initialTimeFilter={searchTimeFilter}
+          />
         </div>
-      </nav>
+      )}
+
+      {/* Expanded Article View */}
+      {selectedArticle && (
+        <ExpandedArticleView
+          article={selectedArticle}
+          onClose={handleCloseExpandedView}
+        />
+      )}
 
       <main className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-6 py-6">
-        {activeTab === 'search' ? (
+        {isSearchMode ? (
           <>
-            <SearchBar
-              onSearch={handleSearch}
-              onClear={handleSearchClear}
-              isLoading={isSearching}
-              initialQuery={searchQuery}
-              initialCategory={searchCategory}
-              initialTimeFilter={searchTimeFilter}
-            />
 
             {/* Search Results */}
             {searchResults.length > 0 ? (
@@ -461,7 +444,7 @@ function HomePageContent() {
                 itemsPerPage={ARTICLES_PER_PAGE}
                 onPageChange={(page) => {
                   setCurrentPage(page);
-                  loadArticles(selectedCategory, page, selectedFeeds);
+                  loadArticles(page, selectedFeeds);
                   saveStateToStorage();
                   updateURLWithState();
                   if (typeof window !== 'undefined' && window.innerWidth < 640) {
