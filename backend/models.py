@@ -12,24 +12,18 @@ Base = declarative_base()
 
 
 class RSSFeed(Base):
-    """Model for storing RSS feed information."""
     __tablename__ = "rss_feeds"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
     url = Column(String(500), nullable=False)
-    category = Column(String(50), nullable=False)
+    category = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
-
-
-
-
 class NewsArticle(Base):
-    """Model for storing processed news articles."""
     __tablename__ = "news_articles"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -39,7 +33,7 @@ class NewsArticle(Base):
     link = Column(String(1000), nullable=False, unique=True)
     author = Column(String(255))
     published_date = Column(DateTime(timezone=True))
-    category = Column(String(50), nullable=False)
+    category = Column(String(50), nullable=True)
     source_name = Column(String(255), nullable=False)
     source_url = Column(String(500))
     image_url = Column(String(1000))
@@ -50,7 +44,6 @@ class NewsArticle(Base):
     
 
 class FeedFetchLog(Base):
-    """Model for logging RSS feed fetch operations."""
     __tablename__ = "feed_fetch_logs"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)

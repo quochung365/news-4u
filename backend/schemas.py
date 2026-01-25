@@ -11,7 +11,7 @@ from config.rss_feeds import NewsCategory
 class RSSFeedBase(BaseModel):
     name: str
     url: str
-    category: NewsCategory
+    category: Optional[NewsCategory] = None
 
 
 class RSSFeedCreate(RSSFeedBase):
@@ -42,7 +42,7 @@ class NewsArticleBase(BaseModel):
     link: str
     author: Optional[str] = None
     published_date: Optional[datetime] = None
-    category: str
+    category: Optional[str] = None
     source_name: str
     source_url: Optional[str] = None
     image_url: Optional[str] = None

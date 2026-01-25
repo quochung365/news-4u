@@ -11,7 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
 from database import get_db
-from services.rss_service import RSSService
+from services.rss import RSSService
 from models import NewsArticle
 
 logger = logging.getLogger(__name__)
@@ -46,13 +46,13 @@ class SchedulerService:
         """Add the job to fetch all feeds every 5 minutes."""
         self.scheduler.add_job(
             func=self._fetch_all_feeds_job,
-            trigger=CronTrigger(minute="*/5"),  # Every 5 minutes
+            trigger=CronTrigger(minute="*/15"),  # Every 15 minutes
             id="fetch_all_feeds",
             name="Fetch all RSS feeds",
             replace_existing=True,
             max_instances=1
         )
-        logger.info("Added feed fetching job (every 5 minutes)")
+        logger.info("Added feed fetching job (every 15 minutes)")
     
     def _add_content_extraction_job(self):
         """Add the job to extract content every minute."""

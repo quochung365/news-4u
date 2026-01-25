@@ -193,23 +193,6 @@ function HomePageContent() {
     setSelectedArticle(null);
   };
 
-  const handleExtractContent = async (articleId: number) => {
-    try {
-      await newsApi.extractArticleContent(articleId);
-      const updatedArticle = articles.find(a => a.id === articleId);
-      if (updatedArticle) {
-        const response = await newsApi.getArticles({ per_page: 1, article_id: articleId });
-        if (response.articles.length > 0) {
-          const newArticle = response.articles[0];
-          setArticles(prev => prev.map(a => a.id === articleId ? newArticle : a));
-          setSelectedArticle(newArticle);
-        }
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
-
   const handleSearch = async (query: string, timeFilter: string) => {
     try {
       setIsSearching(true);

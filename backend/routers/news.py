@@ -17,7 +17,7 @@ from schemas import (
     RSSFeedResponse,
 )
 from schemas import RSSFeedCreate
-from services.rss_service import RSSService
+from services.rss import RSSService
 from services.scheduler_service import scheduler_service
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
@@ -128,7 +128,7 @@ async def fetch_specific_feed(feed_name: str, db: Session = Depends(get_db)):
 
 @router.get("/articles", response_model=NewsArticleList, tags=["Article"])
 async def get_articles(
-    category: Optional[NewsCategory] = Query(None, description="Filter by category"),
+    category: Optional[str] = Query(None, description="Filter by category"),
     source: Optional[str] = Query(None, description="Filter by source name"),
     feeds: Optional[str] = Query(None, description="Comma-separated list of feed names to filter by"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -281,7 +281,7 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
 
 @router.get("/articles/category/{category}", response_model=NewsArticleList, tags=["Article"])
 async def get_articles_by_category(
-    category: NewsCategory,
+    category: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)

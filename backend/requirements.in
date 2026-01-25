@@ -1,0 +1,14 @@
+APScheduler
+fastapi
+httptools
+httpx
+lxml_html_clean
+newspaper3k
+pip
+pydantic-settings
+setuptools
+SQLAlchemy
+uvicorn
+uvloop
+watchfiles
+websockets

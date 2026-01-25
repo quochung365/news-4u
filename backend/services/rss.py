@@ -14,13 +14,13 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from dateutil import parser as dateutil_parser
 
-from config.rss_feeds import NewsCategory, RSSFeed
+from config.rss_feeds import RSSFeed
 import feedparser
 import httpx
 from lib.utils import generate_unique_slug
 from models import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
 from newspaper import Article, Config
-from services.site_extractors import site_extractor_manager
+from services.extractors import Extractor
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -147,7 +147,7 @@ class RSSService:
                 feed = RSSFeed(
                     name=db_feed.name,
                     url=db_feed.url,
-                    category=NewsCategory(db_feed.category),
+                    category="Tech",
                     is_active=db_feed.is_active
                 )
                 
@@ -181,33 +181,9 @@ class RSSService:
         """
         Extract full article content from URL using multiple strategies.
         """
-        try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                try: 
-                    response = await client.get(article_url)
-                    response.raise_for_status()
-                except Exception as e:
-                    logger.error(f"Error fetching article from {article_url}: {e}. trying with headers")
-                    response = await client.get(article_url, headers=self._headers)
-                    response.raise_for_status()
-                
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                extracted_image_url = self._extract_main_image_url_from_html(response.text, article_url)
-                extractor = site_extractor_manager.get_extractor(article_url)
-                
-                if extractor:
-                    logger.info(f"---- Extracting content with {extractor.__class__.__name__} ----")
-                    content = extractor.extract_content(soup, article_url)
-                    if content:
-                        return self._clean_extracted_content(content), extracted_image_url
-                
-                # Fallback to Newspaper3k
-                content = await self._extract_with_newspaper3k(article_url)
-                return content, extracted_image_url
-        except Exception as e:
-            logger.error(f"Error extracting content from {article_url}: {e}")
-            return None, None
+        extractor = Extractor()
+        content = extractor.extract(article_url)
+        return content, None if not content else None
     
     async def cleanup_all_data(self):
         """
@@ -238,7 +214,7 @@ class RSSService:
             })
             self.db.commit()
 
-    def get_articles_by_category(self, category: NewsCategory, limit: int = 50, offset: int = 0) -> List[NewsArticle]:
+    def get_articles_by_category(self, category: str, limit: int = 50, offset: int = 0) -> List[NewsArticle]:
         """
         Get articles by category with pagination.
         """

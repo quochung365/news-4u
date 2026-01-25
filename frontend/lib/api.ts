@@ -76,7 +76,6 @@ export interface RSSFeed {
 export const newsApi = {
   // Get articles
   getArticles: async (params?: {
-    category?: string;
     source?: string;
     feeds?: string[];
     page?: number;
@@ -88,25 +87,6 @@ export const newsApi = {
       apiParams.feeds = params.feeds.join(',');
     }
     const response = await api.get('/api/news/articles', { params: apiParams });
-    return response.data;
-  },
-
-  
-  // Get article by slug
-  getArticleBySlug: async (slug: string): Promise<NewsArticle> => {
-    const response = await api.get(`/api/news/articles/slug/${slug}`);
-    return response.data;
-  },
-
-  // Get articles by category
-  getArticlesByCategory: async (
-    category: string,
-    page: number = 1,
-    per_page: number = 20
-  ): Promise<NewsArticleList> => {
-    const response = await api.get(`/api/news/categories/${category}`, {
-      params: { page, per_page },
-    });
     return response.data;
   },
 
@@ -134,7 +114,6 @@ export const newsApi = {
 
   searchArticles: async (params: {
     query: string;
-    category?: string;
     time_filter?: string;
     page?: number;
     per_page?: number;

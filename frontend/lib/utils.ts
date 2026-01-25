@@ -1,10 +1,4 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-import { CATEGORY_COLORS, CATEGORY_ICONS, SOURCE_ICONS } from "./constants"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+import { SOURCE_ICONS } from "./constants"
 
 export function formatRelativeTime(dateString: string): string {
   // Always treat as UTC (backend always stores UTC)
@@ -50,23 +44,8 @@ export function formatRelativeTime(dateString: string): string {
   return `${diffInYears}y ago`;
 }
 
-export function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category] || CATEGORY_COLORS['default'];
-}
-
-export function getCategoryIcon(category: string): string {
-  return CATEGORY_ICONS[category] || CATEGORY_ICONS['default'];
-}
-
 export function getSourceIcon(sourceName: string): string {
   return SOURCE_ICONS[sourceName] || SOURCE_ICONS['default'];
-}
-
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return text.substring(0, maxLength) + '...';
 }
 
 export function truncateWords(text: string, maxWords: number): string {
@@ -78,21 +57,4 @@ export function truncateWords(text: string, maxWords: number): string {
   }
   
   return words.slice(0, maxWords).join(' ') + '...';
-}
-
-export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-export function calculateReadTime(content: string): number {
-  const wordsPerMinute = 200;
-  const words = content.trim().split(/\s+/).length;
-  return Math.ceil(words / wordsPerMinute);
 } 

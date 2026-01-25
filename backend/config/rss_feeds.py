@@ -5,6 +5,7 @@ RSS Feeds Configuration
 from typing import Dict, List, NamedTuple
 from enum import Enum
 from pydantic import BaseModel
+from database import SessionLocal
 
 
 class NewsCategory(str, Enum):
@@ -100,14 +101,30 @@ RSS_FEEDS: Dict[NewsCategory, List[RSSFeed]] = {
     ]    
 }
 
-class RSSFeedCreate(BaseModel):
-    name: str
-    url: str
-    category: NewsCategory
+def seed_data():
+    db = SessionLocal()
+    try:
+        # 1. Check if data already exists to prevent duplicates
+        existing_feed = db.query()
+        existing_user = db.query(models.User).filter(models.User.email == "admin@example.com").first()
+        
+        if not existing_user:
+            print("Seeding initial data...")
+            new_user = models.User(
+                email="admin@example.com",
+                hashed_password="hashed_password_here" # Use real hashing in prod
+            )
+            db.add(new_user)
+            db.commit()
+            print("Seed successful!")
+        else:
+            print("Data already exists, skipping seed.")
+            
+    except Exception as e:
+        print(f"Error seeding data: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
-def get_all_feeds() -> List[RSSFeed]:
-    """Get all RSS feeds as a flat list."""
-    all_feeds = []
-    for category_feeds in RSS_FEEDS.values():
-        all_feeds.extend(category_feeds)
-    return all_feeds
+if __name__ == "__main__":
+    seed_data()

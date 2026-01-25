@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { NewsArticle } from '@/lib/api';
 import { formatRelativeTime, getSourceIcon } from '@/lib/utils';
 import { X, ExternalLink, Dot } from 'lucide-react';
@@ -8,22 +8,13 @@ import { X, ExternalLink, Dot } from 'lucide-react';
 interface ExpandedArticleViewProps {
   article: NewsArticle;
   onClose: () => void;
-  cardElement?: HTMLElement | null;
 }
 
-export default function ExpandedArticleView({ article, onClose, cardElement }: ExpandedArticleViewProps) {
+export default function ExpandedArticleView({ article, onClose }: ExpandedArticleViewProps) {
   const [imageError, setImageError] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
-
-  useEffect(() => {
-    // Trigger zoom-in animation on mount
-    // Force reflow to ensure animation plays
-    if (contentRef.current) {
-      contentRef.current.offsetHeight;
-    }
-  }, []);
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === overlayRef.current) {

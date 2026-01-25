@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_HOST: str = "localhost"
     SCHEDULE_ENABLE: bool = True
+    GEMINI_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
