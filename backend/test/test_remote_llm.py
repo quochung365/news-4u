@@ -4,7 +4,7 @@
 from operator import contains
 from google import genai
 
-client = genai.Client(api_key="AIzaSyAni5WtbT0IfcRJXQ9q1argzG6nRLW7lfQ")
+client = genai.Client(api_key="")
 context='''
 Summarize the following article, use bullet points if must be. Focus on key facts and ignore ads. Keep it short and concise. Maximum 100 words.
 MAIN_CONTENT
