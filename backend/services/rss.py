@@ -8,24 +8,29 @@ from datetime import datetime
 import logging
 import re
 import time
+import traceback
+import traceback
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
+from schemas import FeedFetchStatus, NewsArticleCreate
 from bs4 import BeautifulSoup
 from dateutil import parser as dateutil_parser
 
 from config.rss_feeds import RSSFeed
 import feedparser
 import httpx
-from lib.utils import generate_unique_slug
+from lib.utils import get_or_build_slug
 from models import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
 from newspaper import Article, Config
 from services.extractors import Extractor
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-# Set up logger
+
 logger = logging.getLogger(__name__)
+
 
 
 class RSSService:
@@ -53,40 +58,33 @@ class RSSService:
     # PUBLIC METHODS
     # ============================================================================
     
-    async def fetch_feed_async(self, feed_name: str) -> Dict:
-        """
-        Fetch RSS feed asynchronously.
-        """
+    async def fetch_feed_async(self, feed: RSSFeedModel) -> Dict:
+        logger.info(f'Starting fetch for feed: {feed.name} ----')
         start_time = time.time()
         log_entry = FeedFetchLog(
-            feed_name=feed_name,
-            status="fetching",
+            feed_id=feed.id,
+            status=FeedFetchStatus.STARTING,            
             articles_found=0,
             articles_processed=0
         )
+        logger.debug(f"Created log entry for feed {feed.name} with status 'starting'")
         if self.db is not None:
+            logger.debug(f"Adding log entry to database for feed {feed.name}")
             self.db.add(log_entry)
             self.db.commit()
-        feed = self.db.query(RSSFeedModel).filter(RSSFeedModel.name == feed_name).first()
-        if not feed:
-            return {
-                "status": "error",
-                "message": f"Feed '{feed_name}' not found"
-            }
+
+
         feed_url = feed.url
         try:
-            logger.info(f'---- Fetching feed from {feed_name} ----')
             response = await self._fetch_with_retry(feed_url)
+            logger.debug(f"Fetched feed URL successfully: {feed_url}")
             
-            # Parse feed
             parsed_feed = feedparser.parse(response.text)
             articles_found = len(parsed_feed.entries)
-            logger.info(f'---- Found {articles_found} articles from {feed.name} ----')
+            logger.info(f'Found {articles_found} articles from {feed.name}')
             
-            # Process articles
-            articles_processed = await self._process_articles_batch(parsed_feed.entries, feed)
+            articles_processed = await self._process_articles(parsed_feed.entries, feed)
             
-            # Update log
             execution_time = int((time.time() - start_time) * 1000)
             object.__setattr__(log_entry, 'status', 'success')  # type: ignore
             object.__setattr__(log_entry, 'articles_found', articles_found)  # type: ignore
@@ -119,70 +117,61 @@ class RSSService:
             }
     
     async def fetch_all_feeds(self) -> Dict:
-        """
-        Fetch all active RSS feeds from the database and process them.
-        Returns a summary of the fetch operation.
-        """
         if self.db is None:
             return {"status": "error", "message": "No database connection"}
         
-        db_feeds = self.db.query(RSSFeedModel).filter(RSSFeedModel.is_active == True).all()
+        feeds = self.db.query(RSSFeedModel).filter(RSSFeedModel.is_active == True).all()
         
-        if not db_feeds:
+        if not feeds:
             return {
-                "status": "success",
+                "status": FeedFetchStatus.SUCCESS,
                 "message": "No active feeds to fetch",
                 "feeds_processed": 0,
                 "total_articles_found": 0,
                 "total_articles_processed": 0
             }
         
-        # Convert DB models to config RSSFeed objects and fetch them
         results = []
         total_articles_found = 0
         total_articles_processed = 0
         
-        for db_feed in db_feeds:
+        for feed in feeds:
             try:
-                feed = RSSFeed(
-                    name=db_feed.name,
-                    url=db_feed.url,
-                    category="Tech",
-                    is_active=db_feed.is_active
-                )
-                
-                result = await self.fetch_feed_async(feed.name)
+                logger.info(f"Processing feed: {feed.name}")
+               
+                result = await self.fetch_feed_async(feed)
+                logger.info(f"Feed '{feed.name}' fetch result: {result}")
                 results.append({
                     "feed_name": feed.name,
                     **result
                 })
                 
-                if result.get("status") == "success":
+                if result.get("status") == FeedFetchStatus.SUCCESS:
                     total_articles_found += result.get("articles_found", 0)
                     total_articles_processed += result.get("articles_processed", 0)
                     
             except Exception as e:
-                logger.error(f"Error processing feed {db_feed.name}: {e}")
+                logger.error(f"Error processing feed {feed.name}: {e}")
                 results.append({
-                    "feed_name": db_feed.name,
-                    "status": "error",
+                    "feed_name": feed.name,
+                    "status": FeedFetchStatus.ERROR,
                     "error": str(e)
                 })
         
         return {
-            "status": "success",
-            "feeds_processed": len(db_feeds),
+            "status": FeedFetchStatus.SUCCESS,
+            "feeds_processed": len(feeds),
             "total_articles_found": total_articles_found,
             "total_articles_processed": total_articles_processed,
             "results": results
         }
     
-    async def extract_article_content(self, article_url: str) -> tuple[Optional[str], Optional[str]]:
+    async def extract_article_content(self, article: NewsArticle) -> tuple[Optional[str], Optional[str]]:
         """
         Extract full article content from URL using multiple strategies.
         """
         extractor = Extractor()
-        content = extractor.extract(article_url)
+        content = extractor.extract(article)
         return content, None if not content else None
     
     async def cleanup_all_data(self):
@@ -303,6 +292,7 @@ class RSSService:
         """
         for attempt in range(max_retries):
             try:
+                logger.debug(f"Fetching URL: {url}, attempt {attempt + 1}")
                 async with httpx.AsyncClient(
                     timeout=self.timeout, 
                     follow_redirects=True,
@@ -329,104 +319,55 @@ class RSSService:
         
         raise Exception(f"Failed to fetch {url} and all fallbacks after {max_retries} attempts each")
     
-    async def _process_articles_batch(self, entries: List, feed: RSSFeed) -> int:
+    async def _process_articles(self, entries: List, feed: RSSFeed) -> int:
         """
         Process RSS feed entries into news articles (metadata only, no content extraction).
-        Handles robust deduplication using ON CONFLICT and efficient batch insertion.
         """
         if not entries:
             return 0
         
-        # List to hold article objects ready for batch insertion
         articles_to_add = []
-        processed_successfully_count = 0
-
         logger.info(f'---- Processing {len(entries)} articles from {feed.name} ----')
-        
-        # Get cached existing slugs or refresh cache if needed
-        existing_slugs = self._get_cached_existing_slugs()
-        
+                
         for entry in entries:
-            link = self._safe_get_string(entry, 'link')
-            if not link:
-                logger.warning(f"Skipping entry from {feed.name} due to missing link: {self._safe_get_string(entry, 'title', 'N/A')}")
-                continue
-
             try:
-                title = self._safe_get_string(entry, 'title')
-                summary = self._extract_summary(entry)
-                author = self._safe_get_string(entry, 'author')
-                published_date = self._extract_published_date(entry)
-                image_url = self._extract_image(entry)
-                
-                if published_date is None:
-                    logger.warning(f"Failed to parse published date for '{title}' from {feed.name}. Storing with None.")
-
-                slug = generate_unique_slug(title, existing_slugs)
-                existing_slugs.add(slug)  # Add to cache to avoid duplicates in this batch
-                
-                article = NewsArticle(
-                    title=title,
-                    summary=summary,
-                    content=None,  # Will be None
-                    link=link,
-                    author=author,
-                    published_date=published_date,
-                    category=feed.category,
-                    source_name=feed.name,
-                    source_url=feed.url,
-                    image_url=image_url,
-                    slug=slug,
-                    created_at=datetime.now(),
-                    is_processed=True  # Marks as metadata-processed
-                )
-                
-                articles_to_add.append(article)
-                
+                data = self._build_article_object(entry, feed)
+                articles_to_add.append(data)
             except Exception as e:
-                logger.error(f"Error extracting data for article '{self._safe_get_string(entry, 'title', 'N/A')}' from {feed.name}: {e}")
+                logger.warning(f"Skipping invalid article: {e}")
                 continue
+
+        if articles_to_add:
+            stmt = pg_insert(NewsArticle).values(articles_to_add)
+            stmt = stmt.on_conflict_do_nothing(index_elements=['link'])
+            
+            self.db.execute(stmt)
+            self.db.commit()
         
-        # --- Batch Insertion with ON CONFLICT for deduplication ---
-        if not articles_to_add:
-            logger.info(f"No new articles to add from {feed.name}.")
-            return 0
+        return len(articles_to_add)
 
-        try:
-            
+    def _build_article_object(self, entry: Dict[str, Any], feed: RSSFeed) -> Optional[NewsArticle]:
+        title = self._safe_get_string(entry, 'title')
+        link = self._safe_get_string(entry, 'link')
+        if not link or not title:
+            raise ValueError(f'[Feed {feed.name}] Skipping article due to missing title or link. Title: "{title}", Link: "{link}"')
 
-            article_dicts = []
-            for article_obj in articles_to_add:
-                article_dict = {
-                    col.name: getattr(article_obj, col.name)
-                    for col in NewsArticle.__table__.columns if col.name != 'id'
-                }
-                article_dicts.append(article_dict)
+        raw_data = {
+            "title": title,
+            "summary": self._extract_summary(entry),
+            "link": link,
+            "author": self._safe_get_string(entry, 'author'),
+            "published_date": self._extract_published_date(entry),
+            "category": feed.category,
+            "source_name": feed.name,
+            "image_url": self._extract_image(entry),
+            "slug": get_or_build_slug(link, title),
+            "feed_id": feed.id,
+        }
 
-            if not article_dicts:
-                logger.info(f"No valid articles for batch insertion from {feed.name}.")
-                return 0
+        validated_article = NewsArticleCreate(**raw_data)
 
-            insert_stmt = sqlite_insert(NewsArticle).values(article_dicts)
-            on_conflict_stmt = insert_stmt.on_conflict_do_nothing(index_elements=['link'])
-            
-            if self.db is not None:
-                self.db.execute(on_conflict_stmt)
-
-            if self.db is not None:
-                self.db.commit()
-
-            processed_successfully_count = len(articles_to_add)
-
-            logger.info(f"Successfully attempted to add {processed_successfully_count} articles from {feed.name}.")
-
-        except Exception as e:
-            logger.error(f"Critical error during batch database insertion for {feed.name}: {e}")
-            if self.db is not None:
-                self.db.rollback()
-            return 0
-
-        return processed_successfully_count
+        return validated_article.model_dump()
     
     async def _extract_with_newspaper3k(self, article_url: str) -> Optional[str]:
         try:
@@ -450,38 +391,13 @@ class RSSService:
         
         return None
         
-    def _get_cached_existing_slugs(self) -> set:
-        """
-        Get cached existing slugs or refresh cache if needed.
-        """
-        current_time = time.time()
-        
-        # Check if cache is valid
-        if (self._cache_timestamp is None or 
-            current_time - self._cache_timestamp > self._cache_ttl or
-            not self._slug_cache):
-            
-            # Refresh cache
-            if self.db is not None:
-                existing_slugs = {article.slug for article in self.db.query(NewsArticle.slug).filter(NewsArticle.slug.isnot(None)).all()}
-                self._slug_cache = existing_slugs
-                self._cache_timestamp = current_time
-                logger.debug(f"Refreshed slug cache with {len(existing_slugs)} existing slugs")
-            else:
-                self._slug_cache = set()
-                self._cache_timestamp = current_time
-        
-        return self._slug_cache.copy()
-    
     def _extract_summary(self, entry) -> Optional[str]:
         """
-        Extract summary from RSS entry.
+        Extract summary from RSS entry, cleanup html tags if exists.
         """
-        # Try different summary fields
         summary = self._safe_get_string(entry, 'summary') or self._safe_get_string(entry, 'description')
         
         if summary:
-            # Clean HTML tags
             soup = BeautifulSoup(summary, 'html.parser')
             return soup.get_text().strip()
         
@@ -728,7 +644,7 @@ class RSSService:
         """
         Safely extract a string value from an entry, handling potential list/dict issues.
         """
-        value = entry.get(key)
+        value = entry.get(key, default)
         if isinstance(value, (list, tuple)):
             return default if not value else str(value[0])
         return str(value) if value is not None else default

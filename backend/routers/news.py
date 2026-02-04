@@ -53,7 +53,7 @@ async def get_feeds_status(db: Session = Depends(get_db)):
     for feed in feeds:
         # Get latest fetch log
         latest_log = db.query(FeedFetchLog).filter(
-            FeedFetchLog.feed_name == feed.name
+            FeedFetchLog.feed_id == feed.id
         ).order_by(FeedFetchLog.fetch_timestamp.desc()).first()
         
         feed_status.append({
@@ -114,7 +114,10 @@ async def fetch_specific_feed(feed_name: str, db: Session = Depends(get_db)):
     """Fetch a specific RSS feed."""   
 
     service = RSSService(db)
-    result = await service.fetch_feed_async(feed_name)
+    feed = db.query(RSSFeed).filter(RSSFeed.name == feed_name).first()
+    if not feed:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    result = await service.fetch_feed_async(feed)
     
     return {
         "feed_name": feed_name,
@@ -140,19 +143,19 @@ async def get_articles(
     offset = (page - 1) * per_page
     
     # Build query with filters - ONLY include articles from active feeds
-    query = db.query(NewsArticle).join(RSSFeed, NewsArticle.source_name == RSSFeed.name).filter(RSSFeed.is_active == True)
+    query = db.query(NewsArticle).join(RSSFeed, NewsArticle.feed_id == RSSFeed.id).filter(RSSFeed.is_active == True)
     
     if category:
         query = query.filter(NewsArticle.category == category.value)
     
     if source:
-        query = query.filter(NewsArticle.source_name == source)
+        query = query.filter(RSSFeed.name == source)
     
     if feeds:
         feed_names = [name.strip() for name in feeds.split(',') if name.strip()]
         if feed_names:
-            query = query.filter(NewsArticle.source_name.in_(feed_names))
-    
+            query = query.filter(RSSFeed.name.in_(feed_names))
+
     # Get total count for pagination
     total = query.count()
     
@@ -163,7 +166,7 @@ async def get_articles(
                    .all()
     
     total_pages = (total + per_page - 1) // per_page
-    
+    print(f"---- Retrieved {len(articles)} articles out of {total} total ----")
     return NewsArticleList(
         articles=[NewsArticleResponse.model_validate(article) for article in articles],
         total=total,
@@ -172,6 +175,11 @@ async def get_articles(
         total_pages=total_pages
     )
 
+@router.post("/debug/extract")
+async def debug_extract():
+    await scheduler_service._extract_content_job()
+    return {"status": "done"}
+    
 
 @router.get("/articles/{article_id}", response_model=NewsArticleResponse, tags=["Article"])
 async def get_article(article_id: int, db: Session = Depends(get_db)):
@@ -179,10 +187,15 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
     logger = logging.getLogger("get_article")
     
     # Only get articles from active feeds
-    article = db.query(NewsArticle).join(RSSFeed, NewsArticle.source_name == RSSFeed.name).filter(
+    article = db.query(NewsArticle).filter(
         NewsArticle.id == article_id,
-        RSSFeed.is_active == True
+        NewsArticle.feed_id.isnot(None)
     ).first()
+    
+    # Verify the feed is active
+    if article and article.feed:
+        if not article.feed.is_active:
+            article = None
     
     if not article:
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
@@ -197,7 +210,7 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
         
         try:
             service = RSSService(db)
-            content, extracted_image_url = await service.extract_article_content(getattr(article, "link"))
+            content, extracted_image_url = await service.extract_article_content(article)
             
             updated = False
             
@@ -220,7 +233,8 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
                 logger.info(f"Article {article_id} updated with extracted content")
             
         except Exception as e:
-            logger.error(f"Error extracting content for article {article_id}: {e}")
+            logger.error(f"Error extracting content for article {article_id}: {e} ")
+            logger.error(f'Stack trace: ', exc_info=True)
             # Continue and return the article even if extraction fails
     
     return article
@@ -232,10 +246,15 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
     logger = logging.getLogger("get_article_by_slug")
     
     # Only get articles from active feeds
-    article = db.query(NewsArticle).join(RSSFeed, NewsArticle.source_name == RSSFeed.name).filter(
+    article = db.query(NewsArticle).filter(
         NewsArticle.slug == slug,
-        RSSFeed.is_active == True
+        NewsArticle.feed_id.isnot(None)
     ).first()
+    
+    # Verify the feed is active
+    if article and article.feed:
+        if not article.feed.is_active:
+            article = None
     
     if not article:
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
@@ -291,8 +310,10 @@ async def get_articles_by_category(
     offset = (page - 1) * per_page
     
     # Only get articles from active feeds
-    query = db.query(NewsArticle).join(RSSFeed, NewsArticle.source_name == RSSFeed.name).filter(
+    query = db.query(NewsArticle).filter(
         NewsArticle.category == category.value,
+        NewsArticle.feed_id.isnot(None)
+    ).join(RSSFeed, NewsArticle.feed_id == RSSFeed.id).filter(
         RSSFeed.is_active == True
     )
     total = query.count()
@@ -329,7 +350,9 @@ async def search_articles(
     offset = (page - 1) * per_page
     
     # Build search query - only search articles from active feeds
-    search_query = db.query(NewsArticle).join(RSSFeed, NewsArticle.source_name == RSSFeed.name).filter(
+    search_query = db.query(NewsArticle).filter(
+        NewsArticle.feed_id.isnot(None)
+    ).join(RSSFeed, NewsArticle.feed_id == RSSFeed.id).filter(
         RSSFeed.is_active == True,
         NewsArticle.title.contains(query) | 
         NewsArticle.summary.contains(query) |

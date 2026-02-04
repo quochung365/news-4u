@@ -33,6 +33,7 @@ function HomePageContent() {
   const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]);
   const [totalArticles, setTotalArticles] = useState(0);
   const [showSearchBar, setShowSearchBar] = useState(false);
+  const [urlStateApplied, setUrlStateApplied] = useState(false);
 
   // State persistence functions
   const saveStateToStorage = () => {
@@ -71,6 +72,7 @@ function HomePageContent() {
   const updateURLWithState = () => {
     const params = new URLSearchParams();
     if (currentPage > 1) params.set('page', currentPage.toString());
+    // Only add feeds param if specific feeds are selected (not all)
     if (selectedFeeds.length > 0) params.set('feeds', selectedFeeds.join(','));
     if (isSearchMode) params.set('tab', 'search');
     if (searchQuery) params.set('q', searchQuery);
@@ -96,37 +98,32 @@ function HomePageContent() {
     return { page, feeds, tab, query, timeFilter };
   };
 
+  // Apply URL/Storage state once on mount. Do not fetch here — the articles effect will run after.
   useEffect(() => {
+    if (urlStateApplied) return;
     const urlState = loadStateFromURL();
-    if (!urlState.page && !urlState.feeds.length && !urlState.query) {
-      const storageState = loadStateFromStorage();
-      if (storageState) {
-        if (storageState.isSearchMode && storageState.searchQuery) {
-          setSearchTotal(storageState.searchTotal || 0);
-        } else {
-          loadArticles(storageState.currentPage || 1, storageState.selectedFeeds || []);
-        }
-      } else {
-        loadArticles(1, []);
-      }
-    } else {
-      if (urlState.tab === 'search' && urlState.query) {
-        handleSearch(urlState.query, urlState.timeFilter);
-      } else {
-        loadArticles(urlState.page, urlState.feeds);
-      }
+    if (urlState.tab === 'search' && urlState.query) {
+      handleSearch(urlState.query, urlState.timeFilter);
     }
-  }, []);
+    setUrlStateApplied(true);
+  }, [urlStateApplied]);
 
+  // Single effect for loading articles: runs only after URL state is applied, and when page/feeds change.
   useEffect(() => {
-    if (!isSearchMode) {
-      loadArticles(currentPage, selectedFeeds);
-    }
-  }, [currentPage, selectedFeeds, isSearchMode]);
+    if (!urlStateApplied) return;
+    if (isSearchMode) return;
 
+    loadArticles(currentPage, selectedFeeds);
+  }, [urlStateApplied, currentPage, selectedFeeds, isSearchMode]);
+
+  // Debounce state persistence to avoid constant saves
   useEffect(() => {
-    saveStateToStorage();
-    updateURLWithState();
+    const timer = setTimeout(() => {
+      saveStateToStorage();
+      updateURLWithState();
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [currentPage, selectedFeeds, isSearchMode, searchQuery, searchTimeFilter]);
 
   // Close search bar when clicking outside
@@ -150,14 +147,17 @@ function HomePageContent() {
     };
   }, [showSearchBar]);
 
-  const loadArticles = async (page = 1, feeds: string[]) => {
+  const loadArticles = async (page = 1, feeds: string[] = []) => {
     try {
       setLoading(prev => ({ ...prev, articles: true }));
       const params: any = {
         page,
         per_page: ARTICLES_PER_PAGE,
-        feeds: feeds,
       };
+      // Only add feeds param if specific feeds are selected
+      if (feeds.length > 0) {
+        params.feeds = feeds;
+      }
       const articlesData = await newsApi.getArticles(params);
       setArticles(articlesData.articles);
       setTotalArticles(articlesData.total);
@@ -172,7 +172,7 @@ function HomePageContent() {
   const handleArticleClick = async (article: NewsArticle) => {
     // Set the selected article to show expanded view
     setSelectedArticle(article);
-    
+
     // Optionally extract content if not already processed
     if (!article.content && !article.is_processed) {
       setLoading(prev => ({ ...prev, articleId: article.id }));
@@ -261,19 +261,29 @@ function HomePageContent() {
   };
 
   const handleFeedSelectionApply = async (feeds: string[]) => {
+    // Only update and reload if feeds selection actually changed
+    if (JSON.stringify(feeds) === JSON.stringify(selectedFeeds)) {
+      return; // No change, don't reload
+    }
+    
     setSelectedFeeds(feeds);
     setCurrentPage(1);
     setSearchQuery('');
     setSearchResults([]);
     setSearchTotal(0);
     setIsSearchMode(false);
+    
     try {
       setLoading(prev => ({ ...prev, articles: true }));
       const params: any = {
         page: 1,
         per_page: ARTICLES_PER_PAGE,
-        feeds: feeds,
       };
+      
+      // Only add feeds param if specific feeds are selected
+      if (feeds.length > 0) {
+        params.feeds = feeds;
+      }
 
       const articlesData = await newsApi.getArticles(params);
       setArticles(articlesData.articles);
@@ -319,14 +329,13 @@ function HomePageContent() {
               <FeedManager
                 selectedFeeds={selectedFeeds}
                 onFeedSelectionApply={handleFeedSelectionApply}
-                />
+              />
               <button
                 onClick={() => setShowSearchBar(!showSearchBar)}
-                className={`flex items-center justify-center p-2 rounded-md transition-colors ${
-                  isSearchMode || showSearchBar
+                className={`flex items-center justify-center p-2 rounded-md transition-colors ${isSearchMode || showSearchBar
                     ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
                     : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
-                }`}
+                  }`}
                 title="Search"
               >
                 <Search className="h-5 w-5" />

@@ -43,8 +43,7 @@ class NewsArticleBase(BaseModel):
     author: Optional[str] = None
     published_date: Optional[datetime] = None
     category: Optional[str] = None
-    source_name: str
-    source_url: Optional[str] = None
+    feed_id: Optional[int] = None
     image_url: Optional[str] = None
     slug: Optional[str] = None
 
@@ -55,7 +54,6 @@ class NewsArticleCreate(NewsArticleBase):
 
 class NewsArticleResponse(NewsArticleBase):
     id: int
-    is_processed: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -73,13 +71,13 @@ class NewsArticleList(BaseModel):
 
 class FeedFetchLogResponse(BaseModel):
     id: int
-    feed_name: str
+    feed_id: int
     fetch_timestamp: datetime
     status: str
     articles_found: int
     articles_processed: int
     error_message: Optional[str] = None
-    execution_time: Optional[int] = None
+    execution_time_ms: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -92,8 +90,8 @@ class HealthCheckResponse(BaseModel):
     feeds_count: int
     articles_count: int
 
-
-class ErrorResponse(BaseModel):
-    detail: str
-    error_code: Optional[str] = None
-    timestamp: datetime = datetime.now() 
+class FeedFetchStatus(str):
+    STARTING = "starting"
+    SUCCESS = "success"
+    ERROR = "error"
+    PARTIAL = "partial"

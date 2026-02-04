@@ -344,7 +344,7 @@ backend/
 - `fetch_feed_async()`: Fetch and process a single RSS feed
 - `fetch_all_feeds()`: Fetch all active feeds
 - `extract_article_content()`: Extract full content from article URL
-- `_process_articles_batch()`: Batch process articles with deduplication
+- `_process_articles()`: Batch process articles with deduplication
 - `toggle_feed_status()`: Enable/disable feeds
 - `delete_feed()`: Remove feeds
 

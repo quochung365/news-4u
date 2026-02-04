@@ -29,20 +29,17 @@ export default function FeedManager({ selectedFeeds, onFeedSelectionApply }: Fee
   }, []);
 
   useEffect(() => {
-    // When feeds are loaded for the first time and selectedFeeds is empty, default to all feeds
+    // Sync localSelection with parent when feeds load or selectedFeeds change.
+    // When selectedFeeds is empty, backend means "all feeds" — show all as selected in UI only; do not call onFeedSelectionApply (avoids redundant API request).
     if (feeds.length > 0 && !hasInitializedRef.current) {
       if (selectedFeeds.length === 0) {
-        const allFeedNames = feeds.map(feed => feed.name);
-        setLocalSelection(allFeedNames);
-        // Automatically apply all feeds selection
-        onFeedSelectionApply(allFeedNames);
+        setLocalSelection(feeds.map(feed => feed.name));
       } else {
         setLocalSelection(selectedFeeds);
       }
       hasInitializedRef.current = true;
     } else if (hasInitializedRef.current) {
-      // After initialization, sync with selectedFeeds from parent
-      setLocalSelection(selectedFeeds);
+      setLocalSelection(selectedFeeds.length > 0 ? selectedFeeds : feeds.map(feed => feed.name));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeds, selectedFeeds]);

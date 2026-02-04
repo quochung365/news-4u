@@ -14,7 +14,7 @@ from services.scheduler_service import scheduler_service
 import logging
 from config.settings import settings
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=settings.DEBUG_LEVEL)
 logger = logging.getLogger(__name__)
 
 

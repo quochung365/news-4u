@@ -9,10 +9,12 @@ from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from database import get_db
 from services.rss import RSSService
 from models import NewsArticle
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,16 @@ class SchedulerService:
         self.is_running = False
     
     def start(self):
+        print("---- Starting Scheduler Service ----")
         """Start the scheduler."""
         if not self.is_running:
             self.scheduler.start()
             self.is_running = True
             logger.info("Scheduler started")
-            
+            # self._extract_content_job()
             # Add the cronjobs
-            self._add_feed_fetching_job()
-            self._add_content_extraction_job()
+            # self._add_feed_fetching_job()
+            # self._add_content_extraction_job()
     
     def stop(self):
         """Stop the scheduler."""
@@ -85,15 +88,21 @@ class SchedulerService:
         logger.info("---- Starting scheduled content extraction job ----")
         try:
             db = next(get_db())
-            
-            # Get the top 20 latest articles without content
-            articles_without_content = db.query(NewsArticle).filter(
-                (NewsArticle.content.is_(None)) | 
-                (NewsArticle.content == "") |
-                (NewsArticle.content == "None")
-            ).order_by(
-                NewsArticle.created_at.desc()
-            ).limit(20).all()
+
+            EXCEPTION_LIST=["5"]
+
+            sql = text("""
+                SELECT * FROM news_articles
+                WHERE content IS NULL OR content = '' OR content = 'None'
+                AND retry_count < :max_retry
+                AND link IS NOT NULL
+                AND feed_id NOT IN :exception_list
+                ORDER BY created_at DESC
+                LIMIT 20
+            """)
+
+            params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY, "exception_list": tuple(EXCEPTION_LIST)}
+            articles_without_content = db.execute(sql, params).all()
             
             if not articles_without_content:
                 logger.info("No articles found that need content extraction")
@@ -106,12 +115,8 @@ class SchedulerService:
             
             for article in articles_without_content:
                 try:
-                    if not getattr(article, 'link', None):
-                        logger.warning(f"Article {article.id} has no link, skipping")
-                        continue
-                    
                     logger.info(f"Extracting content for article {article.id}: {article.title}")
-                    content, extracted_image_url = await service.extract_article_content(getattr(article, 'link'))
+                    content, extracted_image_url = await service.extract_article_content(article)
                     
                     if content:
                         setattr(article, 'content', content)

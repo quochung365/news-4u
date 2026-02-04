@@ -1,5 +1,5 @@
 """
-Database models for the news aggregation system.
+Database models for RSS feeds and news articles.
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Index
@@ -22,6 +22,8 @@ class RSSFeed(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    articles = relationship("NewsArticle", back_populates="feed")
+
 
 class NewsArticle(Base):
     __tablename__ = "news_articles"
@@ -34,23 +36,25 @@ class NewsArticle(Base):
     author = Column(String(255))
     published_date = Column(DateTime(timezone=True))
     category = Column(String(50), nullable=True)
-    source_name = Column(String(255), nullable=False)
-    source_url = Column(String(500))
     image_url = Column(String(1000))
     slug = Column(String(100), unique=True)
-    is_processed = Column(Boolean, default=False)
+    retry_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+    feed_id = Column(ForeignKey("rss_feeds.id"), index=True)
+
+    feed = relationship("RSSFeed", back_populates="articles", lazy="joined")
+
 
 class FeedFetchLog(Base):
     __tablename__ = "feed_fetch_logs"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    feed_name = Column(String(255), nullable=False)
+    feed_id = Column(ForeignKey("rss_feeds.id"), index=True)
+
     fetch_timestamp = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String(50), nullable=False)  # success, error, partial
     articles_found = Column(Integer, default=0)
     articles_processed = Column(Integer, default=0)
     error_message = Column(Text)
-    execution_time = Column(Integer)  # in milliseconds
+    execution_time_ms = Column(Integer)

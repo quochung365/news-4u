@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     DB_HOST: str = "localhost"
     SCHEDULE_ENABLE: bool = True
     GEMINI_API_KEY: str
+    ARTICLE_EXTRACTION_MAX_RETRY:int = 3
+    DEBUG_LEVEL: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

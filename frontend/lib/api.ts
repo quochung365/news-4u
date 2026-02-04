@@ -43,11 +43,9 @@ export interface NewsArticle {
   author?: string;
   published_date?: string;
   category: string;
-  source_name: string;
-  source_url?: string;
+  feed_id?: number;
   image_url?: string;
   slug?: string;
-  is_processed: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -108,7 +106,7 @@ export const newsApi = {
 
   // Extract article content
   extractArticleContent: async (articleId: number): Promise<any> => {
-    const response = await api.post(`/api/news/articles/${articleId}/extract`);
+    const response = await api.get(`/api/news/articles/${articleId}`);
     return response.data;
   },
 
