@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { NewsArticle } from '@/lib/api';
-import { formatRelativeTime, getSourceIcon, truncateWords } from '@/lib/utils';
+import { formatRelativeTime, truncateWords } from '@/lib/utils';
 import { Dot, Loader2 } from 'lucide-react';
 
 interface ArticleCardProps {
@@ -64,7 +64,6 @@ export default function ArticleCard({ article, onArticleClick, isLoading = false
           </div>
           {/* Info row for mobile, below title/summary */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-gray-700 dark:text-gray-300 mt-2 sm:hidden">
-            <span className="flex items-center gap-1"><span className="text-lg">{getSourceIcon(article.source_name)}</span>{article.source_name}</span>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {formatRelativeTime(article.published_date || article.created_at)}
             </span>
@@ -72,8 +71,7 @@ export default function ArticleCard({ article, onArticleClick, isLoading = false
           {/* Bottom row: source and published date (desktop only) */}
           <div className="hidden sm:flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
             <div className="flex items-center space-x-2">
-              <span className="text-lg">{getSourceIcon(article.source_name)}</span>
-              <span>{article.source_name}</span>
+              <span>{article.feed_name}</span>
             </div>
             
             <span className="text-xs text-gray-500 dark:text-gray-400">

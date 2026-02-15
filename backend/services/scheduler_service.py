@@ -33,10 +33,9 @@ class SchedulerService:
             self.scheduler.start()
             self.is_running = True
             logger.info("Scheduler started")
-            # self._extract_content_job()
             # Add the cronjobs
-            # self._add_feed_fetching_job()
-            # self._add_content_extraction_job()
+            self._add_feed_fetching_job()
+            self._add_content_extraction_job()
     
     def stop(self):
         """Stop the scheduler."""
@@ -89,7 +88,7 @@ class SchedulerService:
         try:
             db = next(get_db())
 
-            EXCEPTION_LIST=["5"]
+            EXCEPTION_LIST=["5", "6", "7"]
 
             sql = text("""
                 SELECT * FROM news_articles
@@ -98,7 +97,7 @@ class SchedulerService:
                 AND link IS NOT NULL
                 AND feed_id NOT IN :exception_list
                 ORDER BY created_at DESC
-                LIMIT 20
+                LIMIT 120
             """)
 
             params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY, "exception_list": tuple(EXCEPTION_LIST)}
@@ -115,6 +114,9 @@ class SchedulerService:
             
             for article in articles_without_content:
                 try:
+                    #  convert article from string to NewsArticle object
+                    article = NewsArticle(**article._mapping)
+                    print(f"Extracting content for article {article.id}: {article.title}")
                     logger.info(f"Extracting content for article {article.id}: {article.title}")
                     content, extracted_image_url = await service.extract_article_content(article)
                     
@@ -131,7 +133,7 @@ class SchedulerService:
                     setattr(article, 'updated_at', datetime.now())
                     
                 except Exception as e:
-                    logger.error(f"Error extracting content for article {article.id}: {e}")
+                    logger.error(f"Scheduler: Error extracting content for article {article.id}: {e}")
                     continue
             
             # Commit all changes

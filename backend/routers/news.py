@@ -46,16 +46,35 @@ async def get_fetch_logs(
 
 @router.get("/feeds/status", tags=["Feed"])
 async def get_feeds_status(db: Session = Depends(get_db)):
-    """Get status of all RSS feeds."""
-    feeds = db.query(RSSFeed).all()
+    """Get status of all RSS feeds with optimized query."""
+
+    # Subquery to get latest log per feed
+    latest_logs_subq = (
+        db.query(
+            FeedFetchLog.feed_id,
+            func.max(FeedFetchLog.fetch_timestamp).label('max_timestamp')
+        )
+        .group_by(FeedFetchLog.feed_id)
+        .subquery()
+    )
+
+    # Main query with join
+    results = (
+        db.query(RSSFeed, FeedFetchLog)
+        .outerjoin(
+            latest_logs_subq,
+            RSSFeed.id == latest_logs_subq.c.feed_id
+        )
+        .outerjoin(
+            FeedFetchLog,
+            (FeedFetchLog.feed_id == latest_logs_subq.c.feed_id) &
+            (FeedFetchLog.fetch_timestamp == latest_logs_subq.c.max_timestamp)
+        )
+        .all()
+    )
+
     feed_status = []
-    
-    for feed in feeds:
-        # Get latest fetch log
-        latest_log = db.query(FeedFetchLog).filter(
-            FeedFetchLog.feed_id == feed.id
-        ).order_by(FeedFetchLog.fetch_timestamp.desc()).first()
-        
+    for feed, latest_log in results:
         feed_status.append({
             "name": feed.name,
             "category": feed.category,
@@ -64,7 +83,7 @@ async def get_feeds_status(db: Session = Depends(get_db)):
             "last_status": latest_log.status if latest_log else "never_fetched",
             "articles_processed": latest_log.articles_processed if latest_log else 0
         })
-    
+
     return {"feeds": feed_status}
 
 
@@ -142,44 +161,82 @@ async def get_articles(
     """Get articles with optional filtering and pagination."""
     offset = (page - 1) * per_page
     
-    # Build query with filters - ONLY include articles from active feeds
-    query = db.query(NewsArticle).join(RSSFeed, NewsArticle.feed_id == RSSFeed.id).filter(RSSFeed.is_active == True)
+    # Build WHERE clause conditions
+    where_conditions = ["rf.is_active = true"]
+    params = {"offset": offset, "limit": per_page}
     
     if category:
-        query = query.filter(NewsArticle.category == category.value)
+        where_conditions.append("na.category = :category")
+        params["category"] = category
     
     if source:
-        query = query.filter(RSSFeed.name == source)
+        where_conditions.append("rf.name = :source")
+        params["source"] = source
     
     if feeds:
         feed_names = [name.strip() for name in feeds.split(',') if name.strip()]
         if feed_names:
-            query = query.filter(RSSFeed.name.in_(feed_names))
-
-    # Get total count for pagination
-    total = query.count()
+            placeholders = ",".join([f":feed_{i}" for i in range(len(feed_names))])
+            where_conditions.append(f"rf.name IN ({placeholders})")
+            for i, feed_name in enumerate(feed_names):
+                params[f"feed_{i}"] = feed_name
     
-    # Get paginated results
-    articles = query.order_by(NewsArticle.published_date.desc().nullslast(), NewsArticle.created_at.desc()) \
-                   .offset(offset) \
-                   .limit(per_page) \
-                   .all()
+    where_clause = " AND ".join(where_conditions)
+    
+    # Count query
+    count_sql = f"""
+        SELECT COUNT(*) as total
+        FROM news_articles na
+        JOIN rss_feeds rf ON na.feed_id = rf.id
+        WHERE {where_clause}
+    """
+    
+    count_result = db.execute(text(count_sql), params).fetchone()
+    total = count_result[0] if count_result else 0
+    
+    # Data query
+    data_sql = f"""
+        SELECT na.*, rf.name as feed_name
+        FROM news_articles na
+        JOIN rss_feeds rf ON na.feed_id = rf.id
+        WHERE {where_clause}
+        ORDER BY na.published_date DESC NULLS LAST, na.created_at DESC
+        LIMIT :limit OFFSET :offset
+    """
+    
+    result = db.execute(text(data_sql), params)
+    rows = result.fetchall()
+    
+    # Convert rows directly to response dictionaries
+    articles = []
+    for row in rows:
+        article_dict = {
+            "id": row.id,
+            "title": row.title,
+            "link": row.link,
+            "summary": row.summary,
+            "content": row.content,
+            "published_date": row.published_date,
+            "feed_name": row.feed_name,
+            "category": row.category,
+            "image_url": row.image_url,
+            "slug": row.slug,
+            "author": row.author if hasattr(row, 'author') else None,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at
+        }
+        articles.append(NewsArticleResponse(**article_dict))
     
     total_pages = (total + per_page - 1) // per_page
     print(f"---- Retrieved {len(articles)} articles out of {total} total ----")
     return NewsArticleList(
-        articles=[NewsArticleResponse.model_validate(article) for article in articles],
+        articles=articles,
         total=total,
         page=page,
         per_page=per_page,
         total_pages=total_pages
     )
 
-@router.post("/debug/extract")
-async def debug_extract():
-    await scheduler_service._extract_content_job()
-    return {"status": "done"}
-    
 
 @router.get("/articles/{article_id}", response_model=NewsArticleResponse, tags=["Article"])
 async def get_article(article_id: int, db: Session = Depends(get_db)):
@@ -201,34 +258,34 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
     
     # Check if article has content, if not, extract it automatically
-    if not getattr(article, "content", None) or str(getattr(article, "content", "")).strip() == "":
+    if not article.content or not article.content.strip():
         logger.info(f"Article {article_id} has no content, extracting automatically")
-        
-        if not getattr(article, "link", None):
+
+        if not article.link:
             logger.warning(f"Article {article_id} has no link, cannot extract content")
             return article
-        
+
         try:
             service = RSSService(db)
             content, extracted_image_url = await service.extract_article_content(article)
-            
+
             updated = False
-            
+
             # Update content if extracted
             if content:
-                setattr(article, "content", content)
+                article.content = content
                 updated = True
                 logger.info(f"Successfully extracted content for article {article_id}")
-            
+
             # Update image_url if extracted and missing
-            if extracted_image_url and (not getattr(article, "image_url", None) or str(getattr(article, "image_url", "")).strip() == ""):
-                setattr(article, "image_url", extracted_image_url)
+            if extracted_image_url and (not article.image_url or not article.image_url.strip()):
+                article.image_url = extracted_image_url
                 updated = True
                 logger.info(f"Updated image URL for article {article_id}")
-            
+
             # Update timestamp if any changes were made
             if updated:
-                setattr(article, "updated_at", datetime.now())
+                article.updated_at = datetime.now()
                 db.commit()
                 logger.info(f"Article {article_id} updated with extracted content")
             
@@ -260,34 +317,34 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
     
     # Check if article has content, if not, extract it automatically
-    if not getattr(article, "content", None) or str(getattr(article, "content", "")).strip() == "":
+    if not article.content or not article.content.strip():
         logger.info(f"Article {article.id} (slug: {slug}) has no content, extracting automatically")
-        
-        if not getattr(article, "link", None):
+
+        if not article.link:
             logger.warning(f"Article {article.id} has no link, cannot extract content")
             return article
-        
+
         try:
             service = RSSService(db)
-            content, extracted_image_url = await service.extract_article_content(getattr(article, "link"))
-            
+            content, extracted_image_url = await service.extract_article_content(article)
+
             updated = False
-            
+
             # Update content if extracted
             if content:
-                setattr(article, "content", content)
+                article.content = content
                 updated = True
                 logger.info(f"Successfully extracted content for article {article.id}")
-            
+
             # Update image_url if extracted and missing
-            if extracted_image_url and (not getattr(article, "image_url", None) or str(getattr(article, "image_url", "")).strip() == ""):
-                setattr(article, "image_url", extracted_image_url)
+            if extracted_image_url and (not article.image_url or not article.image_url.strip()):
+                article.image_url = extracted_image_url
                 updated = True
                 logger.info(f"Updated image URL for article {article.id}")
-            
+
             # Update timestamp if any changes were made
             if updated:
-                setattr(article, "updated_at", datetime.now())
+                article.updated_at = datetime.now()
                 db.commit()
                 logger.info(f"Article {article.id} updated with extracted content")
             
@@ -306,7 +363,6 @@ async def get_articles_by_category(
     db: Session = Depends(get_db)
 ):
     """Get articles by specific category."""
-    service = RSSService(db)
     offset = (page - 1) * per_page
     
     # Only get articles from active feeds
@@ -400,13 +456,12 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
     article = db.query(NewsArticle).filter(NewsArticle.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    
     if not article.link:
         raise HTTPException(status_code=400, detail="Article has no link to extract content from")
     
     try:
         service = RSSService(db)
-        content, extracted_image_url = await service.extract_article_content(article.link)
+        content, extracted_image_url = await service.extract_article_content(article)
         
         updated = False
         
@@ -460,28 +515,6 @@ async def stop_scheduler():
     return {"message": "Scheduler stopped"}
 
 
-# ============================================================================
-# SCHEDULER MANAGEMENT ENDPOINTS
-# ============================================================================
-# TODO: Add authentication
-@router.get("/scheduler/status", tags=["Scheduler Management"])
-async def get_scheduler_status():
-    """Get scheduler status."""
-    return {"status": "running" if scheduler_service.scheduler.running else "stopped"}
-
-
-@router.post("/scheduler/start", tags=["Scheduler Management"])
-async def start_scheduler():
-    """Start the scheduler."""
-    scheduler_service.start()
-    return {"message": "Scheduler started"}
-
-
-@router.post("/scheduler/stop", tags=["Scheduler Management"])
-async def stop_scheduler():
-    """Stop the scheduler."""
-    scheduler_service.stop()
-    return {"message": "Scheduler stopped"}
 
 
 # ============================================================================
@@ -545,90 +578,52 @@ async def health_check(db: Session = Depends(get_db)):
 
 @router.get("/stats", tags=["Stats"])
 async def get_stats(db: Session = Depends(get_db)):
-    """Get statistics."""
-    # Get articles by category
+    """Get statistics with optimized queries."""
+
+    # Single query for category stats
     category_stats = db.query(
         NewsArticle.category,
         func.count(NewsArticle.id).label('count')
     ).group_by(NewsArticle.category).all()
-    
+
     articles_by_category = {stat.category: stat.count for stat in category_stats}
-    
-    # Get articles by source
+    total_articles = sum(articles_by_category.values())  # Reuse instead of separate query
+
+    # Source stats query
     source_stats = db.query(
-        NewsArticle.source_name,
+        NewsArticle.feed_id.label('source_name'),
         func.count(NewsArticle.id).label('count')
-    ).group_by(NewsArticle.source_name).all()
-    
+    ).group_by(NewsArticle.feed_id).all()
+
     articles_by_source = {stat.source_name: stat.count for stat in source_stats}
-    
-    # Get recent articles
-    recent_articles = db.query(NewsArticle).order_by(NewsArticle.created_at.desc()).limit(5).all()
-    
-    # Get feed counts
-    active_feeds = db.query(RSSFeed).filter(RSSFeed.is_active == True).count()
-    total_feeds = db.query(RSSFeed).count()
-    
+
+    # Recent articles
+    recent_articles = db.query(NewsArticle).order_by(
+        NewsArticle.created_at.desc()
+    ).limit(5).all()
+
+    # Combined feed counts in single query
+    from sqlalchemy import Integer, case
+    feed_counts = db.query(
+        func.count(RSSFeed.id).label('total'),
+        func.sum(func.cast(RSSFeed.is_active, Integer)).label('active')
+    ).first()
+
     return {
-        "total_articles": db.query(NewsArticle).count(),
+        "total_articles": total_articles,
         "articles_by_category": articles_by_category,
         "articles_by_source": articles_by_source,
         "recent_articles": [
             {
                 "id": article.id,
                 "title": article.title,
-                "source_name": article.source_name,
+                "source_name": article.feed_id,
                 "created_at": article.created_at
             }
             for article in recent_articles
         ],
-        "active_feeds": active_feeds,
-        "total_feeds": total_feeds,
-        "last_updated": datetime.now()
-    }
-
-
-@router.get("/stats", tags=["Stats"])
-async def get_stats(db: Session = Depends(get_db)):
-    """Get statistics."""
-    # Get articles by category
-    category_stats = db.query(
-        NewsArticle.category,
-        func.count(NewsArticle.id).label('count')
-    ).group_by(NewsArticle.category).all()
-    
-    articles_by_category = {stat.category: stat.count for stat in category_stats}
-    
-    # Get articles by source
-    source_stats = db.query(
-        NewsArticle.source_name,
-        func.count(NewsArticle.id).label('count')
-    ).group_by(NewsArticle.source_name).all()
-    
-    articles_by_source = {stat.source_name: stat.count for stat in source_stats}
-    
-    # Get recent articles
-    recent_articles = db.query(NewsArticle).order_by(NewsArticle.created_at.desc()).limit(5).all()
-    
-    # Get feed counts
-    active_feeds = db.query(RSSFeed).filter(RSSFeed.is_active == True).count()
-    total_feeds = db.query(RSSFeed).count()
-    
-    return {
-        "total_articles": db.query(NewsArticle).count(),
-        "articles_by_category": articles_by_category,
-        "articles_by_source": articles_by_source,
-        "recent_articles": [
-            {
-                "id": article.id,
-                "title": article.title,
-                "source_name": article.source_name,
-                "created_at": article.created_at
-            }
-            for article in recent_articles
-        ],
-        "active_feeds": active_feeds,
-        "total_feeds": total_feeds,
+        "active_feeds": feed_counts.active or 0,
+        "total_feeds": feed_counts.total or 0,
         "last_updated": datetime.now()
     }
 

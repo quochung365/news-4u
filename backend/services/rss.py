@@ -9,7 +9,6 @@ import logging
 import re
 import time
 import traceback
-import traceback
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -22,9 +21,7 @@ import feedparser
 import httpx
 from lib.utils import get_or_build_slug
 from models import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
-from newspaper import Article, Config
 from services.extractors import Extractor
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -78,8 +75,14 @@ class RSSService:
         try:
             response = await self._fetch_with_retry(feed_url)
             logger.debug(f"Fetched feed URL successfully: {feed_url}")
-            
-            parsed_feed = feedparser.parse(response.text)
+
+            # Run feedparser.parse in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            parsed_feed = await loop.run_in_executor(
+                None,
+                feedparser.parse,
+                response.text
+            )
             articles_found = len(parsed_feed.entries)
             logger.info(f'Found {articles_found} articles from {feed.name}')
             
@@ -102,7 +105,7 @@ class RSSService:
             }
             
         except Exception as e:
-            logger.error(f"Error fetching feed {feed.name}: {e}")
+            logger.error(f"Async Error fetching feed {feed.name}: {e}")
             execution_time = int((time.time() - start_time) * 1000)
             object.__setattr__(log_entry, 'status', 'error')  # type: ignore
             object.__setattr__(log_entry, 'error_message', str(e))  # type: ignore
@@ -117,11 +120,12 @@ class RSSService:
             }
     
     async def fetch_all_feeds(self) -> Dict:
+        """Fetch all active feeds in parallel."""
         if self.db is None:
             return {"status": "error", "message": "No database connection"}
-        
+
         feeds = self.db.query(RSSFeedModel).filter(RSSFeedModel.is_active == True).all()
-        
+
         if not feeds:
             return {
                 "status": FeedFetchStatus.SUCCESS,
@@ -130,34 +134,36 @@ class RSSService:
                 "total_articles_found": 0,
                 "total_articles_processed": 0
             }
-        
+
+        # Create tasks for parallel execution
+        tasks = [self.fetch_feed_async(feed) for feed in feeds]
+
+        # Execute all feeds in parallel with exception handling
+        results_raw = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
         results = []
         total_articles_found = 0
         total_articles_processed = 0
-        
-        for feed in feeds:
-            try:
-                logger.info(f"Processing feed: {feed.name}")
-               
-                result = await self.fetch_feed_async(feed)
-                logger.info(f"Feed '{feed.name}' fetch result: {result}")
+
+        for feed, result in zip(feeds, results_raw):
+            if isinstance(result, Exception):
+                logger.error(f"Error processing feed {feed.name}: {result}")
+                results.append({
+                    "feed_name": feed.name,
+                    "status": FeedFetchStatus.ERROR,
+                    "error": str(result)
+                })
+            else:
                 results.append({
                     "feed_name": feed.name,
                     **result
                 })
-                
+
                 if result.get("status") == FeedFetchStatus.SUCCESS:
                     total_articles_found += result.get("articles_found", 0)
                     total_articles_processed += result.get("articles_processed", 0)
-                    
-            except Exception as e:
-                logger.error(f"Error processing feed {feed.name}: {e}")
-                results.append({
-                    "feed_name": feed.name,
-                    "status": FeedFetchStatus.ERROR,
-                    "error": str(e)
-                })
-        
+
         return {
             "status": FeedFetchStatus.SUCCESS,
             "feeds_processed": len(feeds),
@@ -171,8 +177,7 @@ class RSSService:
         Extract full article content from URL using multiple strategies.
         """
         extractor = Extractor()
-        content = extractor.extract(article)
-        return content, None if not content else None
+        return extractor.extract(article)
     
     async def cleanup_all_data(self):
         """
@@ -368,29 +373,7 @@ class RSSService:
         validated_article = NewsArticleCreate(**raw_data)
 
         return validated_article.model_dump()
-    
-    async def _extract_with_newspaper3k(self, article_url: str) -> Optional[str]:
-        try:
 
-            config = Config()
-            config.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            config.request_timeout = 15
-            config.memoize_articles = False
-            
-            article = Article(article_url, config=config)
-            article.download()
-            article.parse()
-            
-            if hasattr(article, 'text') and article.text:
-                cleaned_text = self._clean_extracted_content(article.text)
-                if cleaned_text and len(cleaned_text.strip()) > 100:
-                    return cleaned_text
-            
-        except Exception as e:
-            logger.error(f"Error extracting content with Newspaper3k from {article_url}: {e}")
-        
-        return None
-        
     def _extract_summary(self, entry) -> Optional[str]:
         """
         Extract summary from RSS entry, cleanup html tags if exists.

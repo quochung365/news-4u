@@ -173,20 +173,6 @@ function HomePageContent() {
     // Set the selected article to show expanded view
     setSelectedArticle(article);
 
-    // Optionally extract content if not already processed
-    if (!article.content && !article.is_processed) {
-      setLoading(prev => ({ ...prev, articleId: article.id }));
-      try {
-        const updatedArticle = await newsApi.extractArticleContent(article.id);
-        setArticles(prev => prev.map(a => a.id === article.id ? updatedArticle : a));
-        setSelectedArticle(updatedArticle);
-      } catch (error) {
-        // Keep the original article if extraction fails
-        console.error('Error extracting article content:', error);
-      } finally {
-        setLoading(prev => ({ ...prev, articleId: null }));
-      }
-    }
   };
 
   const handleCloseExpandedView = () => {

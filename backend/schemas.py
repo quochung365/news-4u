@@ -56,6 +56,7 @@ class NewsArticleResponse(NewsArticleBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+    feed_name: Optional[str] = None
 
     class Config:
         from_attributes = True

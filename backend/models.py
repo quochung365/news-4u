@@ -13,7 +13,7 @@ Base = declarative_base()
 
 class RSSFeed(Base):
     __tablename__ = "rss_feeds"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
     url = Column(String(500), nullable=False)
@@ -24,10 +24,14 @@ class RSSFeed(Base):
 
     articles = relationship("NewsArticle", back_populates="feed")
 
+    __table_args__ = (
+        Index('ix_rss_feeds_is_active', 'is_active'),
+    )
+
 
 class NewsArticle(Base):
     __tablename__ = "news_articles"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     title = Column(String(500), nullable=False)
     summary = Column(Text)
@@ -44,6 +48,13 @@ class NewsArticle(Base):
     feed_id = Column(ForeignKey("rss_feeds.id"), index=True)
 
     feed = relationship("RSSFeed", back_populates="articles", lazy="joined")
+
+    # Add indexes for common query patterns
+    __table_args__ = (
+        Index('ix_news_articles_published_date', 'published_date'),
+        Index('ix_news_articles_category', 'category'),
+        Index('ix_news_articles_feed_id_created_at', 'feed_id', 'created_at'),
+    )
 
 
 class FeedFetchLog(Base):

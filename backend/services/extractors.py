@@ -4,6 +4,8 @@ from trafilatura import fetch_url, extract
 from models import NewsArticle
 from curl_cffi import requests
 from exceptions import DownloadException
+from bs4 import BeautifulSoup
+
 '''
 - For each NewsArticle
     - download the html page; if cannot download -> throw proper exception and update metric
@@ -33,8 +35,9 @@ class Extractor:
         url = article.link
         try:
             downloaded_html = self.download_page(url)
-            self.extract_main_image(downloaded_html, article)
-            self.extract_content(downloaded_html, article)
+            main_image = self.extract_main_image(downloaded_html, article)
+            content = self.extract_content(downloaded_html, article)
+            return content, main_image
 
         except DownloadException:
             article.retry_count += 1
@@ -46,9 +49,8 @@ class Extractor:
     def extract_main_image(self, html_content: str, article: NewsArticle):
         # Simple heuristic to find the main image from the HTML content
         # In real scenarios, you might want to use more sophisticated methods
-        if article.image_url:
+        if article.image_url and article.image_url != "":
             return None  # Image URL already exists
-        from bs4 import BeautifulSoup
 
         soup = BeautifulSoup(html_content, 'html.parser')
         # Look for og:image meta tag
@@ -70,7 +72,3 @@ class Extractor:
         if content:
             article.content = content
         return content
-    
-    @staticmethod
-    def has_main_image(article: NewsArticle):
-        return article.image_url != None

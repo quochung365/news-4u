@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = settings.DATABASE_URL
 logger.info(f"Using database: {DATABASE_URL}")
-print(f"Using database: {DATABASE_URL}")
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True

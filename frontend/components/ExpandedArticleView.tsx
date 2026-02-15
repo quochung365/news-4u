@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { NewsArticle } from '@/lib/api';
-import { formatRelativeTime, getSourceIcon } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
 import { X, ExternalLink, Dot } from 'lucide-react';
 
 interface ExpandedArticleViewProps {
@@ -95,10 +95,8 @@ export default function ExpandedArticleView({ article, onClose }: ExpandedArticl
 
           {/* Metadata */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-1 text-sm text-gray-600 dark:text-gray-400 mb-6 pb-3 w-full border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2">
-              <span className="text-md">{getSourceIcon(article.source_name)}</span>
-              <span className="font-medium">{article.source_name}</span>
-            </div>
+            <span className="font-medium">From {article.feed_name}</span>
+
             <Dot className="h-4 w-4" />
             <span>{formatRelativeTime(article.published_date || article.created_at)}</span>
           </div>

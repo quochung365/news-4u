@@ -1,4 +1,3 @@
-import { SOURCE_ICONS } from "./constants"
 
 export function formatRelativeTime(dateString: string): string {
   // Always treat as UTC (backend always stores UTC)
@@ -42,10 +41,6 @@ export function formatRelativeTime(dateString: string): string {
 
   const diffInYears = Math.floor(diffInDays / 365);
   return `${diffInYears}y ago`;
-}
-
-export function getSourceIcon(sourceName: string): string {
-  return SOURCE_ICONS[sourceName] || SOURCE_ICONS['default'];
 }
 
 export function truncateWords(text: string, maxWords: number): string {

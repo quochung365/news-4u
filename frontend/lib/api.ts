@@ -48,6 +48,7 @@ export interface NewsArticle {
   slug?: string;
   created_at: string;
   updated_at?: string;
+  feed_name?: string;
 }
 
 export interface NewsArticleList {
@@ -85,6 +86,7 @@ export const newsApi = {
       apiParams.feeds = params.feeds.join(',');
     }
     const response = await api.get('/api/news/articles', { params: apiParams });
+    console.log('✅ Fetched articles:', response.data);
     return response.data;
   },
 
