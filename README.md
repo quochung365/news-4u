@@ -23,6 +23,7 @@ The full documentation includes:
 ### Prerequisites
 - **Node.js** 18+ (for frontend)
 - **Python** 3.9+ (for backend)
+- **PostgreSQL** 15+ (for database)
 - **Docker** (optional, for containerized setup)
 
 ### Local Development Setup
@@ -44,8 +45,13 @@ venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Initialize database (creates SQLite database)
-python scripts/init_db.py
+# Create .env file with database credentials
+# See backend/DATABASE_SETUP.md for details
+cp .env.example .env  # Edit with your database credentials
+
+# Initialize database (PostgreSQL)
+# Tables will be created automatically when you start the server
+# Or manually apply schema: psql -U your_user -d your_db -f sql/create_schema.sql
 
 # Start the server
 uvicorn main:app --reload
@@ -102,26 +108,48 @@ This will start:
 ```
 news-4u/
 ├── backend/                  # FastAPI backend application
-│   ├── config/              # RSS feed configuration
-│   ├── models/              # Database models
+│   ├── config/              # Configuration (settings, RSS feeds)
 │   ├── routers/             # API endpoints
-│   ├── services/            # Business logic
-│   └── scripts/             # Utility scripts
+│   ├── services/            # Business logic (RSS, scheduler, extractors)
+│   ├── sql/                 # SQL schema files
+│   ├── models.py            # Database models (SQLAlchemy)
+│   ├── schemas.py           # Pydantic schemas
+│   ├── database.py          # Database connection
+│   ├── main.py              # FastAPI application entry point
+│   ├── README.md            # Backend documentation
+│   ├── QUICKSTART.md        # Quick start guide
+│   └── DATABASE_SETUP.md    # Database setup guide
 ├── frontend/                # Next.js frontend application
 │   ├── app/                # Next.js pages
 │   ├── components/         # React components
-│   └── lib/                # Utilities
+│   └── lib/                # Utilities and API client
 ├── docker-compose.yml       # Docker configuration
 └── DOCUMENTATION.md         # Complete documentation
 ```
 
 ## 🔧 Configuration
 
-RSS feeds are configured in `backend/config/rss_feeds.py`.
+### Environment Variables
+Create a `.env` file in the backend directory:
+```env
+DB_NAME=news4u_db
+DB_USER=news4u_user
+DB_PASS=your_password
+DB_HOST=localhost
+DB_PORT=5432
+SCHEDULE_ENABLE=true
+GEMINI_API_KEY=your_api_key
+ARTICLE_EXTRACTION_MAX_RETRY=3
+DEBUG_LEVEL=INFO
+```
+
+### RSS Feeds
+RSS feeds are configured in `backend/config/rss_feeds.py` and stored in the database.
 
 **To add or modify feeds:**
-1. Edit `backend/config/rss_feeds.py`
-2. Run `python backend/scripts/init_db.py` to update the database
+1. Use the API endpoint `/api/news/feeds/add` to add new feeds
+2. Use the Feed Manager in the frontend UI
+3. Directly edit the database if needed
 
 ## 📡 API Documentation
 
@@ -147,12 +175,24 @@ This project demonstrates:
 
 ### Common Issues
 
-1. **Database locked**: Ensure no other process is using the database
-2. **Feed fetch failures**: Check internet connection and feed URLs
-3. **Import errors**: Make sure virtual environment is activated
-4. **Frontend API errors**: Verify `NEXT_PUBLIC_API_URL` is set correctly
+1. **Database connection errors**:
+   - Verify PostgreSQL is running
+   - Check credentials in `.env` file
+   - See [backend/DATABASE_SETUP.md](backend/DATABASE_SETUP.md#troubleshooting)
 
-For more troubleshooting tips, see [DOCUMENTATION.md](./DOCUMENTATION.md#troubleshooting)
+2. **Feed fetch failures**:
+   - Check internet connection and feed URLs
+   - View fetch logs at `/api/news/feeds/logs`
+
+3. **Import errors**:
+   - Make sure virtual environment is activated
+   - Reinstall dependencies: `pip install -r requirements.txt`
+
+4. **Frontend API errors**:
+   - Verify `NEXT_PUBLIC_API_URL` is set correctly in frontend/.env
+   - Check that backend is running on the correct port
+
+For more troubleshooting tips, see [backend/README.md](backend/README.md#troubleshooting)
 
 ## 📝 License
 

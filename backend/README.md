@@ -1,6 +1,6 @@
 # News Aggregator Backend
 
-FastAPI backend for a professional news aggregation platform with SQLite database support.
+FastAPI backend for a professional news aggregation platform with PostgreSQL database support.
 
 ## Quick Start
 
@@ -35,36 +35,54 @@ The API will be available at http://localhost:8000
 
 ```text
 backend/
-├── config/            # Configuration files (RSS feed sources)
-├── models/            # SQLAlchemy ORM models (database tables)
+├── config/            # Configuration files (settings, RSS feed sources)
+│   ├── settings.py    # Application settings (database, environment variables)
+│   └── rss_feeds.py   # RSS feed configuration
 ├── routers/           # FastAPI route definitions (API endpoints)
-├── schemas/           # Pydantic schemas for request/response validation
-├── services/          # Business logic and integrations (RSS, content extraction)
-├── scripts/           # Utility scripts (DB setup, initialization)
-├── lib/               # Utility functions and helpers
-├── requirements.txt   # Python dependencies
-├── Dockerfile         # Docker build file
-├── main.py            # FastAPI application entry point
+│   └── news.py        # News API endpoints
+├── services/          # Business logic and integrations
+│   ├── rss.py         # RSS feed fetching and processing
+│   ├── scheduler_service.py  # Background job scheduler
+│   ├── extractors.py  # Generic content extraction
+│   └── site_extractors.py    # Site-specific content extractors
+├── sql/               # SQL schema files
+│   ├── create_schema.sql     # Database schema definition
+│   └── apply_schema.sh       # Schema application script
+├── models.py          # SQLAlchemy ORM models (database tables)
+├── schemas.py         # Pydantic schemas for request/response validation
 ├── database.py        # Database connection/session setup
-└── README.md          # This documentation
+├── exceptions.py      # Custom exceptions
+├── requirements.txt   # Python dependencies
+├── main.py            # FastAPI application entry point
+├── README.md          # This documentation
+├── QUICKSTART.md      # Quick start guide
+└── DATABASE_SETUP.md  # Database setup guide
 ```
 
 ### Folder & File Usage
 
-- **config/**: Centralized configuration, e.g., `rss_feeds.py` lists all RSS sources and categories.
-- **models/**: SQLAlchemy ORM models defining database tables and relationships.
+- **config/**: Centralized configuration including application settings and RSS feed sources.
+  - `settings.py`: Application settings loaded from environment variables.
+  - `rss_feeds.py`: RSS feed configuration with categories.
 - **routers/**: FastAPI API endpoints containing the main API logic.
-- **schemas/**: Pydantic models for validating and serializing API requests and responses.
+  - `news.py`: All news-related endpoints (articles, feeds, search, admin operations).
 - **services/**: Core business logic including RSS feed processing and content extraction.
-- **scripts/**: Utility scripts for database setup and initialization.
-- **main.py**: FastAPI app entry point with app setup, middleware, and router registration.
+  - `rss.py`: RSS feed fetching and processing with parallel execution.
+  - `scheduler_service.py`: Background scheduler for automated feed fetching and content extraction.
+  - `extractors.py`: Generic content extraction using trafilatura.
+  - `site_extractors.py`: Site-specific content extractors for better extraction results.
+- **sql/**: SQL schema files for database setup.
+- **models.py**: SQLAlchemy ORM models defining database tables (RSSFeed, NewsArticle, FeedFetchLog).
+- **schemas.py**: Pydantic models for validating and serializing API requests and responses.
 - **database.py**: SQLAlchemy engine, session, and database initialization logic.
+- **exceptions.py**: Custom exception classes.
+- **main.py**: FastAPI app entry point with app setup, middleware, and router registration.
 
 ---
 
 ## Database Access
 
-The backend uses SQLite by default. The database file will be created as `news_4u.db` in the backend directory.
+The backend uses PostgreSQL. See [DATABASE_SETUP.md](DATABASE_SETUP.md) for detailed setup instructions.
 
 ### Python Shell Access
 
@@ -79,15 +97,25 @@ python
 
 # In Python shell:
 from database import get_db
-from models.database import NewsArticle, RSSFeed, FeedFetchLog
+from models import NewsArticle, RSSFeed, FeedFetchLog
 from sqlalchemy.orm import Session
 
 db = next(get_db())
 # Query examples
 articles = db.query(NewsArticle).limit(5).all()
 for article in articles:
-    print(f"{article.title} - {article.source_name}")
+    print(f"{article.title} - {article.feed.name}")
 db.close()
+```
+
+### Direct PostgreSQL Access
+
+```bash
+# Connect to PostgreSQL
+psql -h localhost -U news4u_user -d news4u_db
+
+# Or for Docker setup
+docker exec -it news4u-db psql -U news4u -d news4u_db
 ```
 
 ## API Documentation
