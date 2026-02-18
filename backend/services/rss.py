@@ -21,7 +21,6 @@ import feedparser
 import httpx
 from lib.utils import get_or_build_slug
 from models import FeedFetchLog, NewsArticle, RSSFeed as RSSFeedModel
-from services.extractors import Extractor
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -172,12 +171,6 @@ class RSSService:
             "results": results
         }
     
-    async def extract_article_content(self, article: NewsArticle) -> tuple[Optional[str], Optional[str]]:
-        """
-        Extract full article content from URL using multiple strategies.
-        """
-        extractor = Extractor()
-        return extractor.extract(article)
     
     async def cleanup_all_data(self):
         """
@@ -208,17 +201,6 @@ class RSSService:
             })
             self.db.commit()
 
-    def get_articles_by_category(self, category: str, limit: int = 50, offset: int = 0) -> List[NewsArticle]:
-        """
-        Get articles by category with pagination.
-        """
-        if self.db is None:
-            return []
-        return self.db.query(NewsArticle).filter(
-            NewsArticle.category == category.value
-        ).order_by(
-            NewsArticle.published_date.desc()
-        ).offset(offset).limit(limit).all()
     
     def get_recent_articles(self, limit: int = 50) -> List[NewsArticle]:
         """
@@ -363,7 +345,6 @@ class RSSService:
             "link": link,
             "author": self._safe_get_string(entry, 'author'),
             "published_date": self._extract_published_date(entry),
-            "category": feed.category,
             "source_name": feed.name,
             "image_url": self._extract_image(entry),
             "slug": get_or_build_slug(link, title),

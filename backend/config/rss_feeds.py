@@ -2,101 +2,30 @@
 RSS Feeds Configuration
 """
 
-from typing import Dict, List, NamedTuple
-from enum import Enum
-from pydantic import BaseModel
+from typing import List, Optional
+from dataclasses import dataclass
 
-
-class NewsCategory(str, Enum):
-    TECH = "Tech"
-    GLOBAL_NEWS = "Global News"
-    VIETNAMESE_NEWS = "Vietnamese News"
-    US_NEWS = "US News"
-
-class RSSFeed(NamedTuple):
+@dataclass
+class RSSFeed:
     name: str
     url: str
-    category: NewsCategory
+    category: Optional[str] = None
     is_active: bool = True
 
 # RSS Feeds Configuration - SEED DATA ONLY
 # This dictionary is used by scripts/init_db.py to populate the database with initial feeds.
 # After seeding, the database becomes the source of truth. Changes here won't affect runtime.
-RSS_FEEDS: Dict[NewsCategory, List[RSSFeed]] = {
-    NewsCategory.VIETNAMESE_NEWS: [
-        RSSFeed(
-            name="Vnexpress",
-            url="https://vnexpress.net/rss/the-gioi.rss",
-            category=NewsCategory.VIETNAMESE_NEWS,
-            is_active=True
-        ),
-        RSSFeed(
-            name="Tuoitre",
-            url="https://tuoitre.vn/rss/the-gioi.rss",
-            category=NewsCategory.VIETNAMESE_NEWS,
-            is_active=True
-        )
-    ],
-    NewsCategory.TECH: [
-        RSSFeed(
-            name="TechCrunch",
-            url="https://techcrunch.com/feed/",
-            category=NewsCategory.TECH,
-            is_active=True
-        ),
-        RSSFeed(
-            name="The Verge",
-            url="https://www.theverge.com/rss/index.xml",
-            category=NewsCategory.TECH,
-            is_active=True
-        ),
-        RSSFeed(
-            name="Engadget",
-            url="https://www.engadget.com/rss.xml",
-            category=NewsCategory.TECH,
-            is_active=True
-        )
-    ],
-    NewsCategory.US_NEWS: [
-        RSSFeed(
-            name="CNBC",
-            url="https://www.cnbc.com/id/100003114/device/rss/rss.html",
-            category=NewsCategory.US_NEWS,
-            is_active=True
-        ),
-        RSSFeed(
-            name="NBC News",
-            url="https://feeds.nbcnews.com/nbcnews/public/news",
-            category=NewsCategory.US_NEWS,
-            is_active=True
-        ),
-        RSSFeed(
-            name= "ABC News",
-            url="https://abcnews.go.com/abcnews/usheadlines",
-            category=NewsCategory.US_NEWS,
-            is_active=True
-        ),
-    ],
-
-    NewsCategory.GLOBAL_NEWS: [
-        RSSFeed(
-            name="BBC News",
-            url="https://feeds.bbci.co.uk/news/rss.xml",
-            category=NewsCategory.GLOBAL_NEWS,
-            is_active=True
-        ),
-        RSSFeed(
-            name="CNBC Global",
-            url="https://www.cnbc.com/id/100727362/device/rss/rss.html",
-            category=NewsCategory.GLOBAL_NEWS,
-            is_active=True
-        ),
-        RSSFeed(
-            name="CBSNews",
-            url="https://www.cbsnews.com/latest/rss/world",
-            category=NewsCategory.GLOBAL_NEWS,
-            is_active=True
-        ),
-    ]    
-}
-
+# Note: Category field is deprecated and no longer used.
+RSS_FEEDS: List[RSSFeed] = [
+    RSSFeed(name="Vnexpress", url="https://vnexpress.net/rss/the-gioi.rss", is_active=True),
+    RSSFeed(name="Tuoitre", url="https://tuoitre.vn/rss/the-gioi.rss", is_active=True),
+    RSSFeed(name="TechCrunch", url="https://techcrunch.com/feed/", is_active=True),
+    RSSFeed(name="The Verge", url="https://www.theverge.com/rss/index.xml", is_active=True),
+    RSSFeed(name="Engadget", url="https://www.engadget.com/rss.xml", is_active=True),
+    RSSFeed(name="CNBC", url="https://www.cnbc.com/id/100003114/device/rss/rss.html", is_active=True),
+    RSSFeed(name="NBC News", url="https://feeds.nbcnews.com/nbcnews/public/news", is_active=True),
+    RSSFeed(name="ABC News", url="https://abcnews.go.com/abcnews/usheadlines", is_active=True),
+    RSSFeed(name="BBC News", url="https://feeds.bbci.co.uk/news/rss.xml", is_active=True),
+    RSSFeed(name="CNBC Global", url="https://www.cnbc.com/id/100727362/device/rss/rss.html", is_active=True),
+    RSSFeed(name="CBSNews", url="https://www.cbsnews.com/latest/rss/world", is_active=True),
+]

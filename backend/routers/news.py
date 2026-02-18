@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Optional
 
-from config.rss_feeds import NewsCategory
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import FeedFetchLog, NewsArticle, RSSFeed
@@ -18,6 +17,7 @@ from schemas import (
 )
 from schemas import RSSFeedCreate
 from services.rss import RSSService
+from services.extractors import Extractor
 from services.scheduler_service import scheduler_service
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
@@ -266,8 +266,8 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
             return article
 
         try:
-            service = RSSService(db)
-            content, extracted_image_url = await service.extract_article_content(article)
+            extractor = Extractor()
+            content, extracted_image_url = extractor.extract(article)
 
             updated = False
 
@@ -325,8 +325,8 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
             return article
 
         try:
-            service = RSSService(db)
-            content, extracted_image_url = await service.extract_article_content(article)
+            extractor = Extractor()
+            content, extracted_image_url = extractor.extract(article)
 
             updated = False
 
@@ -362,25 +362,25 @@ async def get_articles_by_category(
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    """Get articles by specific category."""
+    """Get articles by specific category. Note: Category field is deprecated and will return no results."""
     offset = (page - 1) * per_page
-    
+
     # Only get articles from active feeds
     query = db.query(NewsArticle).filter(
-        NewsArticle.category == category.value,
+        NewsArticle.category == category,
         NewsArticle.feed_id.isnot(None)
     ).join(RSSFeed, NewsArticle.feed_id == RSSFeed.id).filter(
         RSSFeed.is_active == True
     )
     total = query.count()
-    
+
     articles = query.order_by(NewsArticle.published_date.desc().nullslast(), NewsArticle.created_at.desc()) \
                    .offset(offset) \
                    .limit(per_page) \
                    .all()
-    
+
     total_pages = (total + per_page - 1) // per_page
-    
+
     return NewsArticleList(
         articles=[NewsArticleResponse.model_validate(article) for article in articles],
         total=total,
@@ -460,23 +460,23 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Article has no link to extract content from")
     
     try:
-        service = RSSService(db)
-        content, extracted_image_url = await service.extract_article_content(article)
-        
+        extractor = Extractor()
+        content, extracted_image_url = extractor.extract(article)
+
         updated = False
-        
+
         # Update content if extracted
         if content:
             article.content = content
             updated = True
             logger.info(f"Successfully extracted content for article {article_id}")
-        
+
         # Update image_url if extracted and missing
         if extracted_image_url and (not article.image_url or article.image_url.strip() == ""):
             article.image_url = extracted_image_url
             updated = True
             logger.info(f"Updated image URL for article {article_id}")
-        
+
         # Update timestamp if any changes were made
         if updated:
             article.updated_at = datetime.now()
@@ -603,7 +603,7 @@ async def get_stats(db: Session = Depends(get_db)):
     ).limit(5).all()
 
     # Combined feed counts in single query
-    from sqlalchemy import Integer, case
+    from sqlalchemy import Integer
     feed_counts = db.query(
         func.count(RSSFeed.id).label('total'),
         func.sum(func.cast(RSSFeed.is_active, Integer)).label('active')

@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from database import get_db
 from services.rss import RSSService
+from services.extractors import Extractor
 from models import NewsArticle
 from config.settings import settings
 
@@ -97,7 +98,7 @@ class SchedulerService:
                 AND link IS NOT NULL
                 AND feed_id NOT IN :exception_list
                 ORDER BY created_at DESC
-                LIMIT 120
+                LIMIT 30
             """)
 
             params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY, "exception_list": tuple(EXCEPTION_LIST)}
@@ -108,17 +109,17 @@ class SchedulerService:
                 return
             
             logger.info(f"Found {len(articles_without_content)} articles that need content extraction")
-            
-            service = RSSService(db)
+
+            extractor = Extractor()
             extracted_count = 0
-            
+
             for article in articles_without_content:
                 try:
                     #  convert article from string to NewsArticle object
                     article = NewsArticle(**article._mapping)
                     print(f"Extracting content for article {article.id}: {article.title}")
                     logger.info(f"Extracting content for article {article.id}: {article.title}")
-                    content, extracted_image_url = await service.extract_article_content(article)
+                    content, extracted_image_url = extractor.extract(article)
                     
                     if content:
                         setattr(article, 'content', content)

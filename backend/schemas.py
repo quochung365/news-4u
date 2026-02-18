@@ -5,13 +5,12 @@ Pydantic schemas for API request/response models.
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List
 from datetime import datetime
-from config.rss_feeds import NewsCategory
 
 
 class RSSFeedBase(BaseModel):
     name: str
     url: str
-    category: Optional[NewsCategory] = None
+    category: Optional[str] = None
 
 
 class RSSFeedCreate(RSSFeedBase):
@@ -21,7 +20,7 @@ class RSSFeedCreate(RSSFeedBase):
 class RSSFeedUpdate(BaseModel):
     name: Optional[str] = None
     url: Optional[str] = None
-    category: Optional[NewsCategory] = None
+    category: Optional[str] = None
     is_active: Optional[bool] = None
 
 
