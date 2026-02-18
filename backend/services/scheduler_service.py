@@ -89,14 +89,13 @@ class SchedulerService:
         try:
             db = next(get_db())
 
-            EXCEPTION_LIST=["5", "6", "7"]
-
             sql = text("""
-                SELECT * FROM news_articles
-                WHERE content IS NULL OR content = '' OR content = 'None'
-                AND retry_count < :max_retry
-                AND link IS NOT NULL
-                AND feed_id NOT IN :exception_list
+                SELECT * FROM news_articles n
+                JOIN rss_feeds r ON news_articles.feed_id = rss_feeds.id
+                WHERE n.content IS NULL OR n.content = '' OR n.content = 'None'
+                AND n.retry_count < :max_retry
+                AND n.link IS NOT NULL
+                AND r.skip_extraction = FALSE
                 ORDER BY created_at DESC
                 LIMIT 30
             """)

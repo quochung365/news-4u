@@ -19,6 +19,7 @@ class RSSFeed(Base):
     url = Column(String(500), nullable=False)
     category = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True)
+    skip_extraction = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -92,11 +92,30 @@ async def toggle_feed_status(feed_name: str, db: Session = Depends(get_db)):
     """Toggle the active status of a feed."""
     service = RSSService(db)
     result = service.toggle_feed_status(feed_name)
-    
+
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
-    
+
     return result
+
+
+@router.post("/feeds/{feed_name}/toggle-extraction", tags=["Feed"])
+async def toggle_feed_extraction(feed_name: str, db: Session = Depends(get_db)):
+    """Toggle the skip_extraction status of a feed. When enabled, article content extraction will be skipped for feeds that require subscription."""
+    feed = db.query(RSSFeed).filter(RSSFeed.name == feed_name).first()
+
+    if not feed:
+        raise HTTPException(status_code=404, detail=f"Feed '{feed_name}' not found")
+
+    feed.skip_extraction = not feed.skip_extraction
+    db.commit()
+
+    return {
+        "status": "success",
+        "feed_name": feed.name,
+        "skip_extraction": feed.skip_extraction,
+        "message": f"Content extraction {'disabled' if feed.skip_extraction else 'enabled'} for feed '{feed_name}'"
+    }
 
 
 @router.delete("/feeds/delete/{feed_name}", tags=["Feed"])
@@ -258,7 +277,12 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
     
     # Check if article has content, if not, extract it automatically
+    # Skip extraction if the feed has skip_extraction enabled
     if not article.content or not article.content.strip():
+        if article.feed and article.feed.skip_extraction:
+            logger.info(f"Article {article_id} from feed '{article.feed.name}' has skip_extraction enabled, skipping automatic extraction")
+            return article
+
         logger.info(f"Article {article_id} has no content, extracting automatically")
 
         if not article.link:
@@ -288,7 +312,7 @@ async def get_article(article_id: int, db: Session = Depends(get_db)):
                 article.updated_at = datetime.now()
                 db.commit()
                 logger.info(f"Article {article_id} updated with extracted content")
-            
+
         except Exception as e:
             logger.error(f"Error extracting content for article {article_id}: {e} ")
             logger.error(f'Stack trace: ', exc_info=True)
@@ -317,7 +341,12 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Article not found or feed is inactive")
     
     # Check if article has content, if not, extract it automatically
+    # Skip extraction if the feed has skip_extraction enabled
     if not article.content or not article.content.strip():
+        if article.feed and article.feed.skip_extraction:
+            logger.info(f"Article {article.id} (slug: {slug}) from feed '{article.feed.name}' has skip_extraction enabled, skipping automatic extraction")
+            return article
+
         logger.info(f"Article {article.id} (slug: {slug}) has no content, extracting automatically")
 
         if not article.link:
@@ -347,7 +376,7 @@ async def get_article_by_slug(slug: str, db: Session = Depends(get_db)):
                 article.updated_at = datetime.now()
                 db.commit()
                 logger.info(f"Article {article.id} updated with extracted content")
-            
+
         except Exception as e:
             logger.error(f"Error extracting content for article {article.id}: {e}")
             # Continue and return the article even if extraction fails
@@ -456,9 +485,17 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
     article = db.query(NewsArticle).filter(NewsArticle.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
+
+    # Check if feed has skip_extraction enabled
+    if article.feed and article.feed.skip_extraction:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Content extraction is disabled for feed '{article.feed.name}'. This feed requires subscription access."
+        )
+
     if not article.link:
         raise HTTPException(status_code=400, detail="Article has no link to extract content from")
-    
+
     try:
         extractor = Extractor()
         content, extracted_image_url = extractor.extract(article)
@@ -484,9 +521,9 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
             logger.info(f"Article {article_id} updated with extracted content")
         else:
             logger.warning(f"No content extracted for article {article_id}")
-        
+
         return NewsArticleResponse.model_validate(article)
-        
+
     except Exception as e:
         logger.error(f"Error extracting content for article {article_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error extracting content: {str(e)}")

@@ -22,11 +22,13 @@ class RSSFeedUpdate(BaseModel):
     url: Optional[str] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
+    skip_extraction: Optional[bool] = None
 
 
 class RSSFeedResponse(RSSFeedBase):
     id: int
     is_active: bool
+    skip_extraction: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
