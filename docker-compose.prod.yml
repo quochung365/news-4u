@@ -4,13 +4,12 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: news4u-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_DB: ${DB_NAME:-news_4u}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASS:-password}
-    ports:
-      - "${DB_PORT:-5432}:5432"
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -20,19 +19,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Only expose to internal network, not to host
+    # Comment out ports for better security
+    # ports:
+    #   - "5432:5432"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: news4u-backend
-    restart: unless-stopped
+    restart: always
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       - DB_NAME=${DB_NAME:-news_4u}
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASS=${DB_PASS:-password}
+      - DB_PASS=${DB_PASS}
       - DB_HOST=postgres
       - DB_PORT=5432
       - SCHEDULE_ENABLE=${SCHEDULE_ENABLE:-true}
@@ -40,12 +43,10 @@ services:
       - ARTICLE_EXTRACTION_MAX_RETRY=${ARTICLE_EXTRACTION_MAX_RETRY:-3}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ./backend:/app
+      - APP_ENV=production
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - news-network
     healthcheck:
@@ -53,32 +54,37 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     container_name: news4u-frontend
-    restart: unless-stopped
+    restart: always
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NODE_ENV=production
     depends_on:
-      - backend
-    command: npm run dev
+      backend:
+        condition: service_healthy
     networks:
       - news-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   postgres_data:
+    driver: local
 
 networks:
   news-network:
-    driver: bridge 
+    driver: bridge
