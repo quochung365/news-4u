@@ -100,7 +100,7 @@ class SchedulerService:
                 LIMIT 30
             """)
 
-            params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY, "exception_list": tuple(EXCEPTION_LIST)}
+            params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY}
             articles_without_content = db.execute(sql, params).all()
             
             if not articles_without_content:
