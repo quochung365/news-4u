@@ -42,7 +42,7 @@ class NewsArticle(Base):
     published_date = Column(DateTime(timezone=True))
     category = Column(String(50), nullable=True)
     image_url = Column(String(1000))
-    slug = Column(String(100), unique=True)
+    slug = Column(String(1000), unique=True)
     retry_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

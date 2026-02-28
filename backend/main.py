@@ -56,7 +56,8 @@ app.add_middleware(
         "https://news-4u.onrender.com",
         "https://news-4u.vercel.app",
         "http://news.localhost",
-        "http://news.hqtran.com"
+        "http://news.hqtran.com",
+        "https://news.hqtran.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

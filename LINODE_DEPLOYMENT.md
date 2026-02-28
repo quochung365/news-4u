@@ -134,7 +134,7 @@ FRONTEND_PORT=3000
 
 # Frontend Configuration
 # IMPORTANT: Update with your domain or server IP
-NEXT_PUBLIC_API_URL=http://your-domain.com:8000
+NEXT_PUBLIC_API_URL=http://api.hqtran.com:8000
 # OR
 NEXT_PUBLIC_API_URL=http://YOUR_LINODE_IP:8000
 ```
@@ -200,7 +200,7 @@ Add the following configuration:
 # Frontend
 server {
     listen 80;
-    server_name your-domain.com www.your-domain.com;
+    server_name news.hqtran.com www.news.hqtran.com;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -218,7 +218,7 @@ server {
 # Backend API
 server {
     listen 80;
-    server_name api.your-domain.com;
+    server_name api.hqtran.com;
 
     location / {
         proxy_pass http://localhost:8000;

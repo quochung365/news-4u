@@ -19,6 +19,7 @@ from schemas import RSSFeedCreate
 from services.rss import RSSService
 from services.extractors import Extractor
 from services.scheduler_service import scheduler_service
+from services.llm.gemini import gemini_llm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 
@@ -527,6 +528,100 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
     except Exception as e:
         logger.error(f"Error extracting content for article {article_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error extracting content: {str(e)}")
+
+
+@router.post("/articles/{article_id}/summarize", tags=["Article"], response_model=NewsArticleResponse)
+async def summarize_article_content(article_id: int, db: Session = Depends(get_db)):
+    """Generate AI summary for a specific article using Gemini API."""
+    article = db.query(NewsArticle).filter(NewsArticle.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    # Check if article has content to summarize
+    if not article.content or not article.content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Article has no content to summarize. Extract content first using /articles/{article_id}/extract"
+        )
+
+    try:
+        # Generate summary using Gemini
+        summary = gemini_llm.summarize_article(article.title, article.content)
+
+        if summary:
+            article.summary = summary
+            article.updated_at = datetime.now()
+            db.commit()
+            logger.info(f"Successfully generated AI summary for article {article_id}")
+            return NewsArticleResponse.model_validate(article)
+        else:
+            logger.warning(f"Failed to generate summary for article {article_id}")
+            raise HTTPException(status_code=500, detail="Failed to generate summary from Gemini API")
+
+    except Exception as e:
+        logger.error(f"Error generating summary for article {article_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
+
+
+@router.post("/articles/summarize/batch", tags=["Article"])
+async def summarize_articles_batch(
+    article_ids: List[int],
+    db: Session = Depends(get_db)
+):
+    """Generate AI summaries for multiple articles in batch."""
+    if not article_ids:
+        raise HTTPException(status_code=400, detail="No article IDs provided")
+
+    if len(article_ids) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 articles per batch")
+
+    # Fetch articles
+    articles = db.query(NewsArticle).filter(NewsArticle.id.in_(article_ids)).all()
+
+    if not articles:
+        raise HTTPException(status_code=404, detail="No articles found")
+
+    # Prepare articles for batch summarization
+    articles_data = [
+        {
+            'id': article.id,
+            'title': article.title,
+            'content': article.content
+        }
+        for article in articles
+        if article.content and article.content.strip()
+    ]
+
+    if not articles_data:
+        raise HTTPException(status_code=400, detail="No articles with content to summarize")
+
+    try:
+        # Generate summaries
+        summaries = gemini_llm.summarize_batch(articles_data)
+
+        # Update articles with summaries
+        updated_count = 0
+        for article in articles:
+            if article.id in summaries:
+                article.summary = summaries[article.id]
+                article.updated_at = datetime.now()
+                updated_count += 1
+
+        db.commit()
+        logger.info(f"Successfully generated {updated_count} summaries in batch")
+
+        return {
+            "status": "success",
+            "total_requested": len(article_ids),
+            "total_found": len(articles),
+            "total_summarized": updated_count,
+            "summaries": summaries
+        }
+
+    except Exception as e:
+        logger.error(f"Error in batch summarization: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating summaries: {str(e)}")
+
 
 # ============================================================================
 # SCHEDULER MANAGEMENT ENDPOINTS
