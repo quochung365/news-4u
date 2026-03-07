@@ -53,8 +53,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3001", 
         "http://127.0.0.1:3000",
-        "https://news-4u.onrender.com",
-        "https://news-4u.vercel.app",
         "http://news.localhost",
         "http://news.hqtran.com",
         "https://news.hqtran.com",

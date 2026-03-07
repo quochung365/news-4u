@@ -677,6 +677,17 @@ async def delete_article_content(article_id: int, db: Session = Depends(get_db))
     await service.delete_article_content(article_id)
     return {"message": f"Content for article {article_id} deleted successfully"}
 
+@router.post("/admin/extract", tags=["Admin"])
+async def test_extractor(url: str):
+    """Test the content extractor with a specific URL."""
+    extractor = Extractor()
+    print(f"---- Testing extractor for URL: {url} ----")
+    content, image_url = extractor.extract_from_url(url)
+    return {
+        "content": content,
+        "image_url": image_url
+    }
+    
 
 # ============================================================================
 # STATS ENDPOINTS

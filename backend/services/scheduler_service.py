@@ -91,12 +91,12 @@ class SchedulerService:
 
             sql = text("""
                 SELECT * FROM news_articles n
-                JOIN rss_feeds r ON news_articles.feed_id = rss_feeds.id
+                JOIN rss_feeds r ON n.feed_id = r.id
                 WHERE n.content IS NULL OR n.content = '' OR n.content = 'None'
                 AND n.retry_count < :max_retry
                 AND n.link IS NOT NULL
                 AND r.skip_extraction = FALSE
-                ORDER BY created_at DESC
+                ORDER BY n.created_at DESC
                 LIMIT 30
             """)
 

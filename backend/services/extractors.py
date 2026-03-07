@@ -30,6 +30,17 @@ class Extractor:
             # throw exception; update mertics
         return downloaded.text
 
+    def extract_from_url(self, url):
+        """ TestOnly: Extract content and main image from a given URL without using the NewsArticle model. """
+        try:
+            downloaded_html = self.download_page(url)
+            main_image = self.extract_main_image(downloaded_html, NewsArticle(link=url))
+            content = self.extract_content(downloaded_html, NewsArticle(link=url))
+            return content, main_image
+
+        except DownloadException:
+            logger.error(f"Failed to download page: {url}")
+            return None, None
 
     def extract(self, article: NewsArticle):
         url = article.link
