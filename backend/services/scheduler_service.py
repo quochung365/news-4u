@@ -9,12 +9,11 @@ from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from database import get_db
 from services.rss import RSSService
 from services.extractors import Extractor
-from models import NewsArticle
+from models import NewsArticle, RSSFeed
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -89,35 +88,61 @@ class SchedulerService:
         try:
             db = next(get_db())
 
-            sql = text("""
-                SELECT * FROM news_articles n
-                JOIN rss_feeds r ON n.feed_id = r.id
-                WHERE n.content IS NULL OR n.content = '' OR n.content = 'None'
-                AND n.retry_count < :max_retry
-                AND n.link IS NOT NULL
-                AND r.skip_extraction = FALSE
-                ORDER BY n.created_at DESC
-                LIMIT 30
-            """)
 
-            params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY}
-            articles_without_content = db.execute(sql, params).all()
-            
+            # Issue: 
+            # SQL query on lines 92-95 uses SELECT * with a JOIN between news_articles and rss_feeds tables. This means article._mapping contains columns from both tables, including duplicate column names like:
+
+            # id (from both news_articles and rss_feeds) ← This causes the error
+            # category (from both tables)
+            # created_at (from both tables)
+            # updated_at (from both tables)
+            # When you try to do NewsArticle(**article._mapping) on line 119, SQLAlchemy sees multiple values for the same parameter and throws the error.
+
+            # sql = text("""
+            #     SELECT * FROM news_articles n
+            #     JOIN rss_feeds r ON n.feed_id = r.id
+            #     WHERE n.content IS NULL OR n.content = '' OR n.content = 'None'
+            #     AND n.retry_count < :max_retry
+            #     AND n.link IS NOT NULL
+            #     AND r.skip_extraction = FALSE
+            #     ORDER BY n.created_at DESC
+            #     LIMIT 30
+            # """)
+
+            # params = {"max_retry": settings.ARTICLE_EXTRACTION_MAX_RETRY}
+            # articles_without_content = db.execute(sql, params).all()
+           
+            # Query using ORM instead of raw SQL
+            articles_without_content = (
+                db.query(NewsArticle)
+                .join(NewsArticle.feed)
+                .filter(
+                    (NewsArticle.content == None) |
+                    (NewsArticle.content == '') |
+                    (NewsArticle.content == 'None')
+                )
+                .filter(NewsArticle.retry_count < settings.ARTICLE_EXTRACTION_MAX_RETRY)
+                .filter(NewsArticle.link != None)
+                .filter(RSSFeed.skip_extraction == False)
+                .order_by(NewsArticle.created_at.desc())
+                .limit(30)
+                .all()
+            )
+
             if not articles_without_content:
                 logger.info("No articles found that need content extraction")
                 return
-            
+
             logger.info(f"Found {len(articles_without_content)} articles that need content extraction")
 
             extractor = Extractor()
             extracted_count = 0
 
             for article in articles_without_content:
-                try:
-                    #  convert article from string to NewsArticle object
-                    article = NewsArticle(**article._mapping)
+                try:    
+                #   article = NewsArticle(**article._mapping)
                     print(f"Extracting content for article {article.id}: {article.title}")
-                    logger.info(f"Extracting content for article {article.id}: {article.title}")
+                    logger.info(f"Extracting content for articl e {article.id}: {article.title}")
                     content, extracted_image_url = extractor.extract(article)
                     
                     if content:

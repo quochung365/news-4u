@@ -22,6 +22,7 @@ from services.scheduler_service import scheduler_service
 from services.llm.gemini import gemini_llm
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
+from services.scheduler_service import SchedulerService
 
 router = APIRouter(prefix="/api/news")
 logger = logging.getLogger(__name__)
@@ -687,6 +688,13 @@ async def test_extractor(url: str):
         "content": content,
         "image_url": image_url
     }
+
+@router.post("/admin/test", tags=["Admin"])
+async def test_extractor():
+    """Test the content extractor with a specific URL."""
+    scheduler_service = SchedulerService()
+    await scheduler_service._extract_content_job()
+    return {"message": "Test extraction job executed"}
     
 
 # ============================================================================
