@@ -138,32 +138,40 @@ class SchedulerService:
             extractor = Extractor()
             extracted_count = 0
 
-            for article in articles_without_content:
-                try:    
-                #   article = NewsArticle(**article._mapping)
+            # Process fewer articles at a time to avoid blocking for too long
+            batch_size = 5
+            for i, article in enumerate(articles_without_content[:batch_size]):
+                try:
                     print(f"Extracting content for article {article.id}: {article.title}")
-                    logger.info(f"Extracting content for articl e {article.id}: {article.title}")
-                    content, extracted_image_url = extractor.extract(article)
-                    
+                    logger.info(f"Extracting content for article {article.id}: {article.title}")
+
+                    # Run blocking extraction in a thread pool to avoid blocking the event loop
+                    content, extracted_image_url = await asyncio.to_thread(
+                        extractor.extract, article
+                    )
+
                     if content:
                         setattr(article, 'content', content)
                         extracted_count += 1
                         logger.info(f"Successfully extracted content for article {article.id}")
-                    
+
                     if extracted_image_url and not getattr(article, 'image_url', None):
                         setattr(article, 'image_url', extracted_image_url)
                         logger.info(f"Updated image URL for article {article.id}")
-                    
+
                     # Update the article timestamp
                     setattr(article, 'updated_at', datetime.now())
-                    
+
+                    # Yield control back to event loop between articles
+                    await asyncio.sleep(0.1)
+
                 except Exception as e:
                     logger.error(f"Scheduler: Error extracting content for article {article.id}: {e}")
                     continue
-            
+
             # Commit all changes
             db.commit()
-            logger.info(f"Content extraction job completed. Extracted content for {extracted_count} articles")
+            logger.info(f"Content extraction job completed. Extracted content for {extracted_count}/{len(articles_without_content)} articles")
             
         except Exception as e:
             logger.error(f"Error in content extraction job: {e}")
