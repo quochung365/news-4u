@@ -4,6 +4,7 @@ A news aggregation agent that fetches and categorizes news from popular RSS feed
 
 ## Project Structure
 
+
 ```
 news-4u/
 ├── frontend/                 # Next.js frontend application
